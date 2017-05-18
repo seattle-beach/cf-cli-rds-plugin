@@ -14,3 +14,8 @@ and connect it to a Pivotal Web Services (PWS) App.
 For usage of the plugin, you can run:
 
 `cf aws -h` or `cf aws --help`
+
+## Running Tests
+Install ginkgo on your machine. For instructions go to: `https://github.com/onsi/ginkgo`
+
+Run `ginkgo` from the plugin path (`$GOPATH/src/github.com/seattle-beach/cf-cli-rds-plugin/`)
