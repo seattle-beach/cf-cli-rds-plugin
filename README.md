@@ -17,4 +17,6 @@ For usage of the plugin, you can run:
 ## Running Tests
 Install ginkgo on your machine. For instructions go to: `https://github.com/onsi/ginkgo`
 
+If the `ginkgo` command did not get installed, try `go get github.com/onsi/ginkgo/ginkgo`
+
 Run `ginkgo` from the plugin path (`$GOPATH/src/github.com/seattle-beach/cf-cli-rds-plugin/`)
