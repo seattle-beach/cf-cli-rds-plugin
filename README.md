@@ -5,7 +5,7 @@ and connect it to a Pivotal Web Services (PWS) App.
 
 ## Getting Started
 
-`go get https://github.com/seattle-beach/cf-cli-rds-plugin`
+`go get github.com/seattle-beach/cf-cli-rds-plugin`
 
 `cf install-plugin $GOPATH/bin/cf-cli-rds-plugin`
 
