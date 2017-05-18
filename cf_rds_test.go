@@ -9,6 +9,6 @@ import (
 
 var _ = Describe("CfRds", func() {
 	It("Builds a basic plugin", func() {
-		Expect(true).To(BeTrue())
+		Expect(false).To(BeTrue())
 	})
 })
