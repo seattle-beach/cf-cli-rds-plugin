@@ -24,8 +24,8 @@ type BasicPlugin struct{}
 // 1 should the plugin exits nonzero.
 func (c *BasicPlugin) Run(cliConnection plugin.CliConnection, args []string) {
 	// Ensure that we called the command basic-plugin-command
-	if args[0] == "basic-plugin-command" {
-		fmt.Println("Running the basic-plugin-command")
+	if args[0] == "aws" {
+		fmt.Println("Running the aws plugin command")
 	}
 }
 
@@ -43,7 +43,7 @@ func (c *BasicPlugin) Run(cliConnection plugin.CliConnection, args []string) {
 // to the user in the core commands `cf help`, `cf`, or `cf -h`.
 func (c *BasicPlugin) GetMetadata() plugin.PluginMetadata {
 	return plugin.PluginMetadata{
-		Name: "MyBasicPlugin",
+		Name: "aws-plugin",
 		Version: plugin.VersionType{
 			Major: 1,
 			Minor: 0,
@@ -56,13 +56,13 @@ func (c *BasicPlugin) GetMetadata() plugin.PluginMetadata {
 		},
 		Commands: []plugin.Command{
 			{
-				Name:     "basic-plugin-command",
-				HelpText: "Basic plugin command's help text",
+				Name:     "aws",
+				HelpText: "plugin to hook up rds to pws",
 
 				// UsageDetails is optional
 				// It is used to show help of usage of each command
 				UsageDetails: plugin.Usage{
-					Usage: "basic-plugin-command\n   cf basic-plugin-command",
+					Usage: "aws\n   cf aws",
 				},
 			},
 		},
