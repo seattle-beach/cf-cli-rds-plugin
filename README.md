@@ -5,11 +5,10 @@ and connect it to a Pivotal Web Services (PWS) App.
 
 ## Getting Started
 
-`go get github.com/seattle-beach/cf-cli-rds-plugin`
-
-`cf install-plugin $GOPATH/bin/cf-cli-rds-plugin`
-
-`cf aws`
+1. Make sure `$GOPATH` is set. If it isn't already set, `$HOME/go` is probably a reasonable value to use.
+2. `go get github.com/seattle-beach/cf-cli-rds-plugin`
+3. `cf install-plugin $GOPATH/bin/cf-cli-rds-plugin`
+4. `cf aws`
 
 For usage of the plugin, you can run:
 
