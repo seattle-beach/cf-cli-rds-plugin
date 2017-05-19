@@ -2,9 +2,13 @@ package main
 
 import (
 	"fmt"
-
 	"code.cloudfoundry.org/cli/plugin"
+	"encoding/json"
 )
+
+type UpsOption struct {
+	Uri string `json:"uri"`
+}
 
 // BasicPlugin is the struct implementing the interface defined by the core CLI. It can
 // be found at  "code.cloudfoundry.org/cli/plugin/plugin.go"
@@ -15,7 +19,7 @@ type BasicPlugin struct{}
 //
 // Run(....) is the entry point when the core CLI is invoking a command defined
 // by a plugin. The first parameter, plugin.CliConnection, is a struct that can
-// be used to invoke cli commands. The second paramter, args, is a slice of
+// be used to invoke cli commands. The second parameter, args, is a slice of
 // strings. args[0] will be the name of the command, and will be followed by
 // any additional arguments a cli user typed in.
 //
@@ -24,8 +28,18 @@ type BasicPlugin struct{}
 // 1 should the plugin exits nonzero.
 func (c *BasicPlugin) Run(cliConnection plugin.CliConnection, args []string) {
 	// Ensure that we called the command basic-plugin-command
-	if args[0] == "aws" {
-		fmt.Println("Running the aws plugin command")
+	if args[0] == "aws-rds" {
+		if args[1] == "create" {
+			name := args[2]
+			uri, _ := json.Marshal(&UpsOption{
+				Uri: args[4],
+			})
+			resp, err := cliConnection.CliCommand("cups", name, "-p", string(uri))
+			if err != nil {
+				fmt.Println(err)
+			}
+			fmt.Println(resp)
+		}
 	}
 }
 
@@ -35,12 +49,13 @@ func (c *BasicPlugin) Run(cliConnection plugin.CliConnection, args []string) {
 // GetMetadata() returns a PluginMetadata struct. The first field, Name,
 // determines the name of the plugin which should generally be without spaces.
 // If there are spaces in the name a user will need to properly quote the name
-// during uninstall otherwise the name will be treated as seperate arguments.
+// during uninstall otherwise the name will be treated as separate arguments.
 // The second value is a slice of Command structs. Our slice only contains one
 // Command Struct, but could contain any number of them. The first field Name
 // defines the command `cf basic-plugin-command` once installed into the CLI. The
 // second field, HelpText, is used by the core CLI to display help information
 // to the user in the core commands `cf help`, `cf`, or `cf -h`.
+
 func (c *BasicPlugin) GetMetadata() plugin.PluginMetadata {
 	return plugin.PluginMetadata{
 		Name: "aws-plugin",
@@ -56,13 +71,13 @@ func (c *BasicPlugin) GetMetadata() plugin.PluginMetadata {
 		},
 		Commands: []plugin.Command{
 			{
-				Name:     "aws",
+				Name:     "aws-rds",
 				HelpText: "plugin to hook up rds to pws",
 
 				// UsageDetails is optional
 				// It is used to show help of usage of each command
 				UsageDetails: plugin.Usage{
-					Usage: "aws\n   cf aws",
+					Usage: "aws-rds\n   cf aws-rds",
 				},
 			},
 		},
