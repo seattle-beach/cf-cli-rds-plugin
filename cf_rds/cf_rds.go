@@ -43,9 +43,21 @@ func (c *BasicPlugin) Run(cliConnection plugin.CliConnection, args []string) {
 			_, err := cliConnection.CliCommand("cups", name, "-p", string(uri))
 			if err != nil {
 				c.UI.DisplayError(err)
-			} else {
-				c.UI.DisplayText("SUCCESS")
+				return
 			}
+
+			space, err := cliConnection.GetCurrentSpace()
+			if err != nil {
+				c.UI.DisplayError(err)
+				return
+			}
+
+			c.UI.DisplayText("Successfully created user-provided service {{.Name}} in space {{.Space}}! You can bind this service to an app using `cf bind-service` or add it to the `services` section in your manifest.yml",
+				map[string]interface{} {
+					"Name": name,
+					"Space": space.Name,
+				},
+			)
 		}
 	}
 }
