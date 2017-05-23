@@ -3,6 +3,7 @@ package cf_rds
 import (
 	"code.cloudfoundry.org/cli/plugin"
 	"encoding/json"
+	"github.com/cloudfoundry/cli/cf/errors"
 )
 
 type UpsOption struct {
@@ -35,7 +36,12 @@ type BasicPlugin struct{
 func (c *BasicPlugin) Run(cliConnection plugin.CliConnection, args []string) {
 	// Ensure that we called the command basic-plugin-command
 	if args[0] == "aws-rds" {
-		if args[1] == "create" {
+		if len(args) != 5 || args[3] != "--uri" {
+			c.UI.DisplayError(errors.New("Usage: cf aws-rds register NAME --uri URI"))
+			return
+		}
+
+		if args[1] == "register" {
 			name := args[2]
 			uri, _ := json.Marshal(&UpsOption{
 				Uri: args[4],
