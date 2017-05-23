@@ -1,4 +1,4 @@
-package main_test
+package cf_rds_test
 
 import (
 	. "github.com/onsi/ginkgo"
@@ -11,3 +11,4 @@ func TestCfCliRdsPlugin(t *testing.T) {
 	RegisterFailHandler(Fail)
 	RunSpecs(t, "CfCliRdsPlugin Suite")
 }
+

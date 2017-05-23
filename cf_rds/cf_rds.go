@@ -1,7 +1,6 @@
-package main
+package cf_rds
 
 import (
-	"fmt"
 	"code.cloudfoundry.org/cli/plugin"
 	"encoding/json"
 )
@@ -10,9 +9,16 @@ type UpsOption struct {
 	Uri string `json:"uri"`
 }
 
+type TinyUI interface {
+	DisplayError(err error)
+	DisplayText(template string, data ...map[string]interface{})
+}
+
 // BasicPlugin is the struct implementing the interface defined by the core CLI. It can
 // be found at  "code.cloudfoundry.org/cli/plugin/plugin.go"
-type BasicPlugin struct{}
+type BasicPlugin struct{
+	UI  TinyUI
+}
 
 // Run must be implemented by any plugin because it is part of the
 // plugin interface defined by the core CLI.
@@ -34,11 +40,12 @@ func (c *BasicPlugin) Run(cliConnection plugin.CliConnection, args []string) {
 			uri, _ := json.Marshal(&UpsOption{
 				Uri: args[4],
 			})
-			resp, err := cliConnection.CliCommand("cups", name, "-p", string(uri))
+			_, err := cliConnection.CliCommand("cups", name, "-p", string(uri))
 			if err != nil {
-				fmt.Println(err)
+				c.UI.DisplayError(err)
+			} else {
+				c.UI.DisplayText("SUCCESS")
 			}
-			fmt.Println(resp)
 		}
 	}
 }
@@ -84,20 +91,3 @@ func (c *BasicPlugin) GetMetadata() plugin.PluginMetadata {
 	}
 }
 
-// Unlike most Go programs, the `Main()` function will not be used to run all of the
-// commands provided in your plugin. Main will be used to initialize the plugin
-// process, as well as any dependencies you might require for your
-// plugin.
-func main() {
-	// Any initialization for your plugin can be handled here
-	//
-	// Note: to run the plugin.Start method, we pass in a pointer to the struct
-	// implementing the interface defined at "code.cloudfoundry.org/cli/plugin/plugin.go"
-	//
-	// Note: The plugin's main() method is invoked at install time to collect
-	// metadata. The plugin will exit 0 and the Run([]string) method will not be
-	// invoked.
-	plugin.Start(new(BasicPlugin))
-	// Plugin code should be written in the Run([]string) method,
-	// ensuring the plugin environment is bootstrapped.
-}
