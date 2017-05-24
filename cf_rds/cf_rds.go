@@ -63,7 +63,13 @@ func (c *BasicPlugin) Run(cliConnection plugin.CliConnection, args []string) {
 				return
 			}
 
-			subnetGroupName := *subnetGroupsResp.DBSubnetGroups[0].DBSubnetGroupName
+			subnetGroups := subnetGroupsResp.DBSubnetGroups
+			if len(subnetGroups) == 0 {
+				c.UI.DisplayError(errors.New("Error: did not find any DB subnet groups to create RDS instance in"))
+				return
+			}
+
+			subnetGroupName := *subnetGroups[0].DBSubnetGroupName
 			params := &rds.CreateDBInstanceInput{
 				DBInstanceClass:         aws.String("db.t2.micro"), // Required
 				DBInstanceIdentifier:    aws.String(args[2]), // Required
@@ -96,12 +102,17 @@ func (c *BasicPlugin) Run(cliConnection plugin.CliConnection, args []string) {
 			}
 
 			resourceID := createDBInstanceResp.DBInstance.DbiResourceId
-			secGroup := createDBInstanceResp.DBInstance.VpcSecurityGroups[0].VpcSecurityGroupId
+			vpcSecGroups := createDBInstanceResp.DBInstance.VpcSecurityGroups
+			if len(vpcSecGroups) == 0 {
+				c.UI.DisplayError(errors.New("Error: do not have any VPC security groups to associate with RDS instance"))
+				return
+			}
+			secGroup := vpcSecGroups[0].VpcSecurityGroupId
 
 			c.UI.DisplayText("Successfully created user-provided service {{.Name}} exposing RDS Instance {{.Name}}, {{.RDSID}} in AWS VPC {{.VPC}} with Security Group {{.SecGroup}}! You can bind this service to an app using `cf bind-service` or add it to the `services` section in your manifest.yml", map[string]interface{}{
 				"Name": args[2],
 				"RDSID": *resourceID,
-				"VPC": *subnetGroupsResp.DBSubnetGroups[0].VpcId,
+				"VPC": *subnetGroups[0].VpcId,
 				"SecGroup": *secGroup,
 			})
 			return

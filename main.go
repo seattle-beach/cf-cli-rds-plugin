@@ -5,6 +5,10 @@ import (
 	"github.com/seattle-beach/cf-cli-rds-plugin/cf_rds"
 	"code.cloudfoundry.org/cli/util/configv3"
 	"code.cloudfoundry.org/cli/util/ui"
+	"github.com/aws/aws-sdk-go/aws/session"
+	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/service/rds"
+	"github.com/aws/aws-sdk-go/aws/endpoints"
 )
 
 type MyConfig struct {}
@@ -40,8 +44,14 @@ func main() {
 	// invoked.
 	config := MyConfig {}
 	my_ui, _ := ui.NewUI(&config)
+	sess := session.Must(session.NewSession(&aws.Config {
+		Region: aws.String(endpoints.UsEast1RegionID),
+	}))
+
+	svc := rds.New(sess)
 	rds_plugin := cf_rds.BasicPlugin{
 		UI: my_ui,
+		Svc: svc,
 	}
 	plugin.Start(&rds_plugin)
 	// Plugin code should be written in the Run([]string) method,

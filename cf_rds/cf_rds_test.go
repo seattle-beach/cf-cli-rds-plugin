@@ -118,10 +118,10 @@ var _ = Describe("CfRds", func() {
 					},
 
 				}, nil)
-				p.Run(conn, args)
 			})
 
 			It("lists the DB subnet groups in the user's account", func() {
+				p.Run(conn, args)
 				Expect(fakeRDSSvc.DescribeDBSubnetGroupsCallCount()).To(Equal(1))
 				Expect(fakeRDSSvc.DescribeDBSubnetGroupsArgsForCall(0)).To(Equal(&rds.DescribeDBSubnetGroupsInput{
 					Filters: []*rds.Filter{
@@ -138,6 +138,7 @@ var _ = Describe("CfRds", func() {
 			})
 
 			It("creates an RDS DB instance in the first subnet group", func() {
+				p.Run(conn, args)
 				Expect(fakeRDSSvc.CreateDBInstanceCallCount()).To(Equal(1))
 
 				createDBInstanceInput := fakeRDSSvc.CreateDBInstanceArgsForCall(0)
@@ -151,16 +152,49 @@ var _ = Describe("CfRds", func() {
 			})
 
 			It("creates a user-provided service with the created RDS instance", func() {
+				p.Run(conn, args)
 				Expect(conn.CliCommandCallCount()).To(Equal(1))
 				Expect(conn.CliCommandArgsForCall(0)).To(Equal([]string{"cups", "name"}))
 			})
 
 			It("prints a success message", func() {
+				p.Run(conn, args)
 				Expect(ui.TextTemplate).To(Equal("Successfully created user-provided service {{.Name}} exposing RDS Instance {{.Name}}, {{.RDSID}} in AWS VPC {{.VPC}} with Security Group {{.SecGroup}}! You can bind this service to an app using `cf bind-service` or add it to the `services` section in your manifest.yml"))
 				Expect(ui.Data["Name"]).To(Equal("name"))
 				Expect(ui.Data["RDSID"]).To(Equal("resourceid"))
 				Expect(ui.Data["VPC"]).To(Equal("vpcid"))
 				Expect(ui.Data["SecGroup"]).To(Equal("vpcgroup"))
+			})
+
+			Context("error cases", func() {
+				Context("when there are no DB subnet groups", func() {
+					BeforeEach(func() {
+						fakeRDSSvc.DescribeDBSubnetGroupsReturns(&rds.DescribeDBSubnetGroupsOutput{
+							DBSubnetGroups: []*rds.DBSubnetGroup{},
+						}, nil)
+					})
+
+					It("should return an error", func() {
+						p.Run(conn, args)
+						Expect(ui.Err).To(MatchError("Error: did not find any DB subnet groups to create RDS instance in"))
+					})
+				})
+
+				Context("when there are no vpc security groups", func() {
+					BeforeEach(func() {
+						fakeRDSSvc.CreateDBInstanceReturns(&rds.CreateDBInstanceOutput{
+							DBInstance: &rds.DBInstance{
+								DbiResourceId: aws.String("resourceid"),
+								VpcSecurityGroups: []*rds.VpcSecurityGroupMembership{},
+							},
+						}, nil)
+					})
+
+					It("should return an error", func() {
+						p.Run(conn, args)
+						Expect(ui.Err).To(MatchError("Error: do not have any VPC security groups to associate with RDS instance"))
+					})
+				})
 			})
 		})
 	})
