@@ -112,6 +112,7 @@ var _ = Describe("CfRds", func() {
 				fakeRDSSvc.CreateDBInstanceReturns(&rds.CreateDBInstanceOutput{
 					DBInstance: &rds.DBInstance{
 						DbiResourceId: aws.String("resourceid"),
+						DBInstanceArn: aws.String("arn:aws:rds:us-east-1:10101010:db:name"),
 						VpcSecurityGroups: []*rds.VpcSecurityGroupMembership{{
 							VpcSecurityGroupId: aws.String("vpcgroup"),
 						}},
@@ -154,7 +155,14 @@ var _ = Describe("CfRds", func() {
 			It("creates a user-provided service with the created RDS instance", func() {
 				p.Run(conn, args)
 				Expect(conn.CliCommandCallCount()).To(Equal(1))
-				Expect(conn.CliCommandArgsForCall(0)).To(Equal([]string{"cups", "name"}))
+
+				cupsArgs := conn.CliCommandArgsForCall(0)
+				Expect(len(cupsArgs)).To(Equal(4))
+				Expect(cupsArgs[0:3]).To(Equal([]string{"cups", "name", "-p"}))
+				Expect(cupsArgs[3]).To(MatchJSON(`{
+					"arn": "arn:aws:rds:us-east-1:10101010:db:name",
+					"resource_id": "resourceid"
+				}`))
 			})
 
 			It("prints a success message", func() {
@@ -185,6 +193,7 @@ var _ = Describe("CfRds", func() {
 						fakeRDSSvc.CreateDBInstanceReturns(&rds.CreateDBInstanceOutput{
 							DBInstance: &rds.DBInstance{
 								DbiResourceId: aws.String("resourceid"),
+								DBInstanceArn: aws.String("resourcearn"),
 								VpcSecurityGroups: []*rds.VpcSecurityGroupMembership{},
 							},
 						}, nil)

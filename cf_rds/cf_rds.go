@@ -32,6 +32,11 @@ type RDSService interface {
 	CreateDBInstance(input *rds.CreateDBInstanceInput) (*rds.CreateDBInstanceOutput, error)
 }
 
+type DBInstance struct {
+	ARN string `json:"arn"`
+	ResourceID string `json:"resource_id"`
+}
+
 // Run must be implemented by any plugin because it is part of the
 // plugin interface defined by the core CLI.
 //
@@ -95,18 +100,30 @@ func (c *BasicPlugin) Run(cliConnection plugin.CliConnection, args []string) {
 
 			createDBInstanceResp, err := c.Svc.CreateDBInstance(params)
 			if err != nil {
-				fmt.Println(err.Error())
-				return
-			}
-
-			_, err = cliConnection.CliCommand("cups", args[2])
-			if err != nil {
 				c.UI.DisplayError(err)
 				return
 			}
 
 			resourceID := createDBInstanceResp.DBInstance.DbiResourceId
+			arn := createDBInstanceResp.DBInstance.DBInstanceArn
 			vpcSecGroups := createDBInstanceResp.DBInstance.VpcSecurityGroups
+
+			dbI := DBInstance{
+				ResourceID: *resourceID,
+				ARN: *arn,
+			}
+			serviceInfo, err := json.Marshal(&dbI)
+			if err != nil {
+				c.UI.DisplayError(err)
+				return
+			}
+
+			_, err = cliConnection.CliCommand("cups", args[2], "-p", string(serviceInfo))
+			if err != nil {
+				c.UI.DisplayError(err)
+				return
+			}
+
 			if len(vpcSecGroups) == 0 {
 				c.UI.DisplayError(errors.New("Error: do not have any VPC security groups to associate with RDS instance"))
 				return
