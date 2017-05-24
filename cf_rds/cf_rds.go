@@ -7,6 +7,8 @@ import (
 	"github.com/aws/aws-sdk-go/service/rds"
 	"github.com/aws/aws-sdk-go/aws"
 	"fmt"
+	"time"
+	"math/rand"
 )
 
 type UpsOption struct {
@@ -70,18 +72,21 @@ func (c *BasicPlugin) Run(cliConnection plugin.CliConnection, args []string) {
 			}
 
 			subnetGroupName := *subnetGroups[0].DBSubnetGroupName
+			dbName := GenerateRandomString()
+			dbPassword := GenerateRandomAlphanumericString()
+
 			params := &rds.CreateDBInstanceInput{
 				DBInstanceClass:         aws.String("db.t2.micro"), // Required
-				DBInstanceIdentifier:    aws.String(args[2]), // Required
-				Engine:                  aws.String("postgres"), // Required
+				DBInstanceIdentifier:    aws.String(args[2]),       // Required
+				Engine:                  aws.String("postgres"),    // Required
 				AllocatedStorage:        aws.Int64(20),
 				AutoMinorVersionUpgrade: aws.Bool(true),
 				AvailabilityZone:        aws.String("us-east-1a"),
 				CopyTagsToSnapshot:      aws.Bool(true),
-				DBName:                  aws.String(fmt.Sprintf("%sdb", args[2])),
+				DBName:                  aws.String(dbName),
 				DBParameterGroupName:    aws.String("default.postgres9.6"),
 				DBSubnetGroupName:       aws.String(subnetGroupName),
-				MasterUserPassword:      aws.String("password"),
+				MasterUserPassword:      aws.String(dbPassword),
 				MasterUsername:          aws.String("root"),
 				MultiAZ:                 aws.Bool(false),
 				Port:                    aws.Int64(5432),
@@ -89,7 +94,6 @@ func (c *BasicPlugin) Run(cliConnection plugin.CliConnection, args []string) {
 			}
 
 			createDBInstanceResp, err := c.Svc.CreateDBInstance(params)
-
 			if err != nil {
 				fmt.Println(err.Error())
 				return
@@ -110,9 +114,9 @@ func (c *BasicPlugin) Run(cliConnection plugin.CliConnection, args []string) {
 			secGroup := vpcSecGroups[0].VpcSecurityGroupId
 
 			c.UI.DisplayText("Successfully created user-provided service {{.Name}} exposing RDS Instance {{.Name}}, {{.RDSID}} in AWS VPC {{.VPC}} with Security Group {{.SecGroup}}! You can bind this service to an app using `cf bind-service` or add it to the `services` section in your manifest.yml", map[string]interface{}{
-				"Name": args[2],
-				"RDSID": *resourceID,
-				"VPC": *subnetGroups[0].VpcId,
+				"Name":     args[2],
+				"RDSID":    *resourceID,
+				"VPC":      *subnetGroups[0].VpcId,
 				"SecGroup": *secGroup,
 			})
 			return
@@ -149,7 +153,6 @@ func (c *BasicPlugin) Run(cliConnection plugin.CliConnection, args []string) {
 		return
 	}
 }
-
 
 // GetMetadata must be implemented as part of the plugin interface
 // defined by the core CLI.
@@ -190,4 +193,26 @@ func (c *BasicPlugin) GetMetadata() plugin.PluginMetadata {
 			},
 		},
 	}
+}
+
+func GenerateRandomString() string {
+	rand.Seed(time.Now().UnixNano())
+	letterRunes := []rune("abcdefghijklmnopqrstuvwxyz")
+	b := make([]rune, 10)
+	for i := range b {
+		b[i] = letterRunes[rand.Intn(len(letterRunes))]
+	}
+
+	return string(b)
+}
+
+func GenerateRandomAlphanumericString() string {
+	rand.Seed(time.Now().UnixNano())
+	letterRunes := []rune("abcdefghijklmnopqrstuvwxyz1234567890")
+	b := make([]rune, 10)
+	for i := range b {
+		b[i] = letterRunes[rand.Intn(len(letterRunes))]
+	}
+
+	return string(b)
 }
