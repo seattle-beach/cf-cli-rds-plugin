@@ -4,6 +4,9 @@ import (
 	"code.cloudfoundry.org/cli/plugin"
 	"encoding/json"
 	"github.com/cloudfoundry/cli/cf/errors"
+	"github.com/aws/aws-sdk-go/service/rds"
+	"github.com/aws/aws-sdk-go/aws"
+	"fmt"
 )
 
 type UpsOption struct {
@@ -17,8 +20,14 @@ type TinyUI interface {
 
 // BasicPlugin is the struct implementing the interface defined by the core CLI. It can
 // be found at  "code.cloudfoundry.org/cli/plugin/plugin.go"
-type BasicPlugin struct{
+type BasicPlugin struct {
 	UI  TinyUI
+	Svc RDSService
+}
+
+type RDSService interface {
+	DescribeDBSubnetGroups(input *rds.DescribeDBSubnetGroupsInput) (*rds.DescribeDBSubnetGroupsOutput, error)
+	CreateDBInstance(input *rds.CreateDBInstanceInput) (*rds.CreateDBInstanceOutput, error)
 }
 
 // Run must be implemented by any plugin because it is part of the
@@ -36,12 +45,69 @@ type BasicPlugin struct{
 func (c *BasicPlugin) Run(cliConnection plugin.CliConnection, args []string) {
 	// Ensure that we called the command basic-plugin-command
 	if args[0] == "aws-rds" {
-		if len(args) != 5 || args[3] != "--uri" {
-			c.UI.DisplayError(errors.New("Usage: cf aws-rds register NAME --uri URI"))
+		if len(args) > 2 && args[1] == "create" {
+			subnetGroupsResp, err := c.Svc.DescribeDBSubnetGroups(&rds.DescribeDBSubnetGroupsInput{
+				Filters: []*rds.Filter{
+					{
+						Name: aws.String("*"),
+						Values: []*string{
+							aws.String("*"),
+						},
+					},
+				},
+				Marker:     aws.String("String"),
+				MaxRecords: aws.Int64(20),
+			})
+			if err != nil {
+				c.UI.DisplayError(err)
+				return
+			}
+
+			subnetGroupName := *subnetGroupsResp.DBSubnetGroups[0].DBSubnetGroupName
+			params := &rds.CreateDBInstanceInput{
+				DBInstanceClass:         aws.String("db.t2.micro"), // Required
+				DBInstanceIdentifier:    aws.String(args[2]), // Required
+				Engine:                  aws.String("postgres"), // Required
+				AllocatedStorage:        aws.Int64(20),
+				AutoMinorVersionUpgrade: aws.Bool(true),
+				AvailabilityZone:        aws.String("us-east-1a"),
+				CopyTagsToSnapshot:      aws.Bool(true),
+				DBName:                  aws.String(fmt.Sprintf("%sdb", args[2])),
+				DBParameterGroupName:    aws.String("default.postgres9.6"),
+				DBSubnetGroupName:       aws.String(subnetGroupName),
+				MasterUserPassword:      aws.String("password"),
+				MasterUsername:          aws.String("root"),
+				MultiAZ:                 aws.Bool(false),
+				Port:                    aws.Int64(5432),
+				PubliclyAccessible:      aws.Bool(true),
+			}
+
+			createDBInstanceResp, err := c.Svc.CreateDBInstance(params)
+
+			if err != nil {
+				fmt.Println(err.Error())
+				return
+			}
+
+			_, err = cliConnection.CliCommand("cups", args[2])
+			if err != nil {
+				c.UI.DisplayError(err)
+				return
+			}
+
+			resourceID := createDBInstanceResp.DBInstance.DbiResourceId
+			secGroup := createDBInstanceResp.DBInstance.VpcSecurityGroups[0].VpcSecurityGroupId
+
+			c.UI.DisplayText("Successfully created user-provided service {{.Name}} exposing RDS Instance {{.Name}}, {{.RDSID}} in AWS VPC {{.VPC}} with Security Group {{.SecGroup}}! You can bind this service to an app using `cf bind-service` or add it to the `services` section in your manifest.yml", map[string]interface{}{
+				"Name": args[2],
+				"RDSID": *resourceID,
+				"VPC": *subnetGroupsResp.DBSubnetGroups[0].VpcId,
+				"SecGroup": *secGroup,
+			})
 			return
 		}
 
-		if args[1] == "register" {
+		if len(args) == 5 && args[1] == "register" && args[3] == "--uri" {
 			name := args[2]
 			uri, _ := json.Marshal(&UpsOption{
 				Uri: args[4],
@@ -59,14 +125,20 @@ func (c *BasicPlugin) Run(cliConnection plugin.CliConnection, args []string) {
 			}
 
 			c.UI.DisplayText("Successfully created user-provided service {{.Name}} in space {{.Space}}! You can bind this service to an app using `cf bind-service` or add it to the `services` section in your manifest.yml",
-				map[string]interface{} {
-					"Name": name,
+				map[string]interface{}{
+					"Name":  name,
 					"Space": space.Name,
 				},
 			)
+			return
 		}
+
+		c.UI.DisplayError(errors.New(fmt.Sprintf("%s\n%s", "Usage: cf aws-rds register NAME --uri URI",
+			"cf aws-rds create NAME")))
+		return
 	}
 }
+
 
 // GetMetadata must be implemented as part of the plugin interface
 // defined by the core CLI.
@@ -108,4 +180,3 @@ func (c *BasicPlugin) GetMetadata() plugin.PluginMetadata {
 		},
 	}
 }
-

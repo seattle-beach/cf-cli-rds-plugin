@@ -40,7 +40,9 @@ func main() {
 	// invoked.
 	config := MyConfig {}
 	my_ui, _ := ui.NewUI(&config)
-	rds_plugin := cf_rds.BasicPlugin{ UI: my_ui}
+	rds_plugin := cf_rds.BasicPlugin{
+		UI: my_ui,
+	}
 	plugin.Start(&rds_plugin)
 	// Plugin code should be written in the Run([]string) method,
 	// ensuring the plugin environment is bootstrapped.

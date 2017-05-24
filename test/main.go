@@ -45,7 +45,7 @@ func main() {
 
 	params := &rds.CreateDBInstanceInput{
 		DBInstanceClass:         aws.String("db.t2.micro"), // Required
-		DBInstanceIdentifier:    aws.String("test-db-instance-2"), // Required
+		DBInstanceIdentifier:    aws.String("test-db-instance-3"), // Required
 		Engine:                  aws.String("postgres"), // Required
 		AllocatedStorage:        aws.Int64(5),
 		AutoMinorVersionUpgrade: aws.Bool(true),
