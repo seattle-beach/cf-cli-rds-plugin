@@ -35,135 +35,161 @@ type RDSService interface {
 }
 
 type DBInstance struct {
-	ARN string `json:"arn"`
-	ResourceID string `json:"resource_id"`
+	ARN string `json:"arn,omitempty"`
+	InstanceName string `json:"instance_id,omitempty"`
+	ResourceID string `json:"resource_id,omitempty"`
 	DBURI string `json:"uri,omitempty"`
+	Username string `json:"username,omitempty"`
+	Password string `json:"password,omitempty"`
+	DBName string `json:"database,omitempty"`
+	SecGroups []*rds.VpcSecurityGroupMembership `json:"-"`
+}
+
+func (c *BasicPlugin) getSubnetGroups() ([]*rds.DBSubnetGroup, error) {
+	subnetGroupsResp, err := c.Svc.DescribeDBSubnetGroups(&rds.DescribeDBSubnetGroupsInput{
+		Filters: []*rds.Filter{
+			{
+				Name: aws.String("*"),
+				Values: []*string{
+					aws.String("*"),
+				},
+			},
+		},
+		Marker:     aws.String("String"),
+		MaxRecords: aws.Int64(20),
+	})
+	if err != nil {
+		return []*rds.DBSubnetGroup{}, err
+	}
+
+	subnetGroups := subnetGroupsResp.DBSubnetGroups
+	if len(subnetGroups) == 0 {
+		return subnetGroups, errors.New("Error: did not find any DB subnet groups to create RDS instance in")
+	}
+
+	return subnetGroups, nil
+}
+
+func (c *BasicPlugin) createRDSInstance(instanceName string, subnetGroupName *string) (DBInstance, error) {
+	dbName := GenerateRandomString()
+	dbPassword := GenerateRandomAlphanumericString()
+
+	createDBInstanceResp, err := c.Svc.CreateDBInstance(&rds.CreateDBInstanceInput{
+		DBInstanceClass:         aws.String("db.t2.micro"), // Required
+		DBInstanceIdentifier:    aws.String(instanceName),       // Required
+		Engine:                  aws.String("postgres"),    // Required
+		AllocatedStorage:        aws.Int64(20),
+		AutoMinorVersionUpgrade: aws.Bool(true),
+		AvailabilityZone:        aws.String("us-east-1a"),
+		CopyTagsToSnapshot:      aws.Bool(true),
+		DBName:                  aws.String(dbName),
+		DBParameterGroupName:    aws.String("default.postgres9.6"),
+		DBSubnetGroupName:       subnetGroupName,
+		MasterUserPassword:      aws.String(dbPassword),
+		MasterUsername:          aws.String("root"),
+		MultiAZ:                 aws.Bool(false),
+		Port:                    aws.Int64(5432),
+		PubliclyAccessible:      aws.Bool(true),
+	})
+	if err != nil {
+		return DBInstance{}, err
+	}
+
+	secGroups := createDBInstanceResp.DBInstance.VpcSecurityGroups
+	if len(secGroups) == 0 {
+		return DBInstance{}, errors.New("Error: do not have any VPC security groups to associate with RDS instance")
+	}
+
+	return DBInstance{
+		InstanceName: instanceName,
+		ARN: *createDBInstanceResp.DBInstance.DBInstanceArn,
+		ResourceID: *createDBInstanceResp.DBInstance.DbiResourceId,
+		Username: "root",
+		Password: dbPassword,
+		DBName: dbName,
+		SecGroups: secGroups,
+	}, nil
+}
+
+func (c *BasicPlugin) populateWhenReady(instance *DBInstance) error {
+	var dbAddr *string
+	var dbPort *int64
+
+	for {
+		describeDBInstancesResp, err := c.Svc.DescribeDBInstances(&rds.DescribeDBInstancesInput{
+			DBInstanceIdentifier: aws.String(instance.InstanceName),
+		})
+		if err != nil {
+			return err
+		}
+
+		dbInstanceStatus := describeDBInstancesResp.DBInstances[0].DBInstanceStatus
+		if *dbInstanceStatus == "available" {
+			dbAddr = describeDBInstancesResp.DBInstances[0].Endpoint.Address
+			dbPort = describeDBInstancesResp.DBInstances[0].Endpoint.Port
+			break
+		}
+
+		nextCheckTime := time.Now().Add(c.WaitDuration)
+		c.UI.DisplayText("Checking connectivity... not available yet, will check again at {{.Time}}", map[string]interface{}{
+			"Time": nextCheckTime.Format("15:04:05"),
+		})
+		time.Sleep(1 * c.WaitDuration)
+	}
+
+	instance.DBURI = fmt.Sprintf("postgres://root:%s@%s:%d/%s", instance.Password, *dbAddr, *dbPort, instance.DBName)
+
+	return nil
 }
 
 func (c *BasicPlugin) Run(cliConnection plugin.CliConnection, args []string) {
 	// Ensure that we called the command basic-plugin-command
 	if args[0] == "aws-rds" {
 		if len(args) > 2 && args[1] == "create" {
-			subnetGroupsResp, err := c.Svc.DescribeDBSubnetGroups(&rds.DescribeDBSubnetGroupsInput{
-				Filters: []*rds.Filter{
-					{
-						Name: aws.String("*"),
-						Values: []*string{
-							aws.String("*"),
-						},
-					},
-				},
-				Marker:     aws.String("String"),
-				MaxRecords: aws.Int64(20),
-			})
+			serviceName := args[2]
+			subnetGroups, err := c.getSubnetGroups()
 			if err != nil {
 				c.UI.DisplayError(err)
 				return
 			}
 
-			subnetGroups := subnetGroupsResp.DBSubnetGroups
-			if len(subnetGroups) == 0 {
-				c.UI.DisplayError(errors.New("Error: did not find any DB subnet groups to create RDS instance in"))
-				return
-			}
-
-			subnetGroupName := *subnetGroups[0].DBSubnetGroupName
-			dbName := GenerateRandomString()
-			dbPassword := GenerateRandomAlphanumericString()
-
-			createDBInstanceResp, err := c.Svc.CreateDBInstance(&rds.CreateDBInstanceInput{
-				DBInstanceClass:         aws.String("db.t2.micro"), // Required
-				DBInstanceIdentifier:    aws.String(args[2]),       // Required
-				Engine:                  aws.String("postgres"),    // Required
-				AllocatedStorage:        aws.Int64(20),
-				AutoMinorVersionUpgrade: aws.Bool(true),
-				AvailabilityZone:        aws.String("us-east-1a"),
-				CopyTagsToSnapshot:      aws.Bool(true),
-				DBName:                  aws.String(dbName),
-				DBParameterGroupName:    aws.String("default.postgres9.6"),
-				DBSubnetGroupName:       aws.String(subnetGroupName),
-				MasterUserPassword:      aws.String(dbPassword),
-				MasterUsername:          aws.String("root"),
-				MultiAZ:                 aws.Bool(false),
-				Port:                    aws.Int64(5432),
-				PubliclyAccessible:      aws.Bool(true),
-			})
+			dbInstance, err := c.createRDSInstance(serviceName, subnetGroups[0].DBSubnetGroupName)
 			if err != nil {
 				c.UI.DisplayError(err)
 				return
 			}
 
-			resourceID := createDBInstanceResp.DBInstance.DbiResourceId
-			arn := createDBInstanceResp.DBInstance.DBInstanceArn
-			vpcSecGroups := createDBInstanceResp.DBInstance.VpcSecurityGroups
-
-			if len(vpcSecGroups) == 0 {
-				c.UI.DisplayError(errors.New("Error: do not have any VPC security groups to associate with RDS instance"))
-				return
-			}
-			secGroup := vpcSecGroups[0].VpcSecurityGroupId
-
-			dbI := DBInstance{
-				ResourceID: *resourceID,
-				ARN: *arn,
-			}
-			serviceInfo, err := json.Marshal(&dbI)
+			serviceInfo, err := json.Marshal(&dbInstance)
 			if err != nil {
 				c.UI.DisplayError(err)
 				return
 			}
 
-			_, err = cliConnection.CliCommand("cups", args[2], "-p", string(serviceInfo))
+			_, err = cliConnection.CliCommand("cups", serviceName, "-p", string(serviceInfo))
 			if err != nil {
 				c.UI.DisplayError(err)
 				return
 			}
 
-			var dbAddr *string
-			var dbPort *int64
+			c.populateWhenReady(&dbInstance)
 
-			for {
-				describeDBInstancesResp, err := c.Svc.DescribeDBInstances(&rds.DescribeDBInstancesInput{
-					DBInstanceIdentifier: aws.String(args[2]),
-				})
-				if err != nil {
-					c.UI.DisplayError(err)
-					return
-				}
-
-				dbInstanceStatus := describeDBInstancesResp.DBInstances[0].DBInstanceStatus
-				if *dbInstanceStatus == "available" {
-					dbAddr = describeDBInstancesResp.DBInstances[0].Endpoint.Address
-					dbPort = describeDBInstancesResp.DBInstances[0].Endpoint.Port
-					break
-				}
-
-				nextCheckTime := time.Now().Add(c.WaitDuration)
-				c.UI.DisplayText("Checking connectivity... not available yet, will check again at {{.Time}}", map[string]interface{}{
-					"Time": nextCheckTime.Format("15:04:05"),
-				})
-				time.Sleep(1 * c.WaitDuration)
-			}
-
-			dbI = DBInstance{
-				ResourceID: *resourceID,
-				ARN: *arn,
-				DBURI: fmt.Sprintf("postgres://root:%s@%s:%d/%s", dbPassword, *dbAddr, *dbPort, dbName),
-			}
-
-			serviceInfo, err = json.Marshal(&dbI)
+			serviceInfo, err = json.Marshal(&dbInstance)
 			if err != nil {
 				c.UI.DisplayError(err)
 				return
 			}
 
-			_, err = cliConnection.CliCommand("uups", args[2], "-p", string(serviceInfo))
+			_, err = cliConnection.CliCommand("uups", serviceName, "-p", string(serviceInfo))
+			if err != nil {
+				c.UI.DisplayError(err)
+				return
+			}
 
 			c.UI.DisplayText("Successfully created user-provided service {{.Name}} exposing RDS Instance {{.Name}}, {{.RDSID}} in AWS VPC {{.VPC}} with Security Group {{.SecGroup}}! You can bind this service to an app using `cf bind-service` or add it to the `services` section in your manifest.yml", map[string]interface{}{
-				"Name":     args[2],
-				"RDSID":    *resourceID,
+				"Name":     serviceName,
+				"RDSID":    dbInstance.ResourceID,
 				"VPC":      *subnetGroups[0].VpcId,
-				"SecGroup": *secGroup,
+				"SecGroup": *dbInstance.SecGroups[0].VpcSecurityGroupId,
 			})
 			return
 		}

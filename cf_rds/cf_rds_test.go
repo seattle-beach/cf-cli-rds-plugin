@@ -192,8 +192,12 @@ var _ = Describe("CfRds", func() {
 				Expect(len(cupsArgs)).To(Equal(4))
 				Expect(cupsArgs[0:3]).To(Equal([]string{"cups", "name", "-p"}))
 				Expect(cupsArgs[3]).To(MatchJSON(`{
+					"instance_id": "name",
 					"arn": "arn:aws:rds:us-east-1:10101010:db:name",
-					"resource_id": "resourceid"
+					"resource_id": "resourceid",
+					"username": "root",
+					"password": "password",
+					"database": "database"
 				}`))
 			})
 
@@ -210,9 +214,13 @@ var _ = Describe("CfRds", func() {
 				Expect(len(uupsArgs)).To(Equal(4))
 				Expect(uupsArgs[0:3]).To(Equal([]string{"uups", "name", "-p"}))
 				Expect(uupsArgs[3]).To(MatchJSON(`{
+					"instance_id": "name",
 					"arn": "arn:aws:rds:us-east-1:10101010:db:name",
 					"resource_id": "resourceid",
-					"uri": "postgres://root:password@test-uri.us-east-1.rds.amazonaws.com:5432/database"
+					"uri": "postgres://root:password@test-uri.us-east-1.rds.amazonaws.com:5432/database",
+					"username": "root",
+					"password": "password",
+					"database": "database"
 				}`))
 			})
 
