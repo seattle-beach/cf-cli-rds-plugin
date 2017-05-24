@@ -25,30 +25,21 @@ type TinyUI interface {
 type BasicPlugin struct {
 	UI  TinyUI
 	Svc RDSService
+	WaitDuration time.Duration
 }
 
 type RDSService interface {
 	DescribeDBSubnetGroups(input *rds.DescribeDBSubnetGroupsInput) (*rds.DescribeDBSubnetGroupsOutput, error)
 	CreateDBInstance(input *rds.CreateDBInstanceInput) (*rds.CreateDBInstanceOutput, error)
+	DescribeDBInstances(input *rds.DescribeDBInstancesInput) (*rds.DescribeDBInstancesOutput, error)
 }
 
 type DBInstance struct {
 	ARN string `json:"arn"`
 	ResourceID string `json:"resource_id"`
+	DBURI string `json:"uri,omitempty"`
 }
 
-// Run must be implemented by any plugin because it is part of the
-// plugin interface defined by the core CLI.
-//
-// Run(....) is the entry point when the core CLI is invoking a command defined
-// by a plugin. The first parameter, plugin.CliConnection, is a struct that can
-// be used to invoke cli commands. The second parameter, args, is a slice of
-// strings. args[0] will be the name of the command, and will be followed by
-// any additional arguments a cli user typed in.
-//
-// Any error handling should be handled with the plugin itself (this means printing
-// user facing errors). The CLI will exit 0 if the plugin exits 0 and will exit
-// 1 should the plugin exits nonzero.
 func (c *BasicPlugin) Run(cliConnection plugin.CliConnection, args []string) {
 	// Ensure that we called the command basic-plugin-command
 	if args[0] == "aws-rds" {
@@ -80,7 +71,7 @@ func (c *BasicPlugin) Run(cliConnection plugin.CliConnection, args []string) {
 			dbName := GenerateRandomString()
 			dbPassword := GenerateRandomAlphanumericString()
 
-			params := &rds.CreateDBInstanceInput{
+			createDBInstanceResp, err := c.Svc.CreateDBInstance(&rds.CreateDBInstanceInput{
 				DBInstanceClass:         aws.String("db.t2.micro"), // Required
 				DBInstanceIdentifier:    aws.String(args[2]),       // Required
 				Engine:                  aws.String("postgres"),    // Required
@@ -96,9 +87,7 @@ func (c *BasicPlugin) Run(cliConnection plugin.CliConnection, args []string) {
 				MultiAZ:                 aws.Bool(false),
 				Port:                    aws.Int64(5432),
 				PubliclyAccessible:      aws.Bool(true),
-			}
-
-			createDBInstanceResp, err := c.Svc.CreateDBInstance(params)
+			})
 			if err != nil {
 				c.UI.DisplayError(err)
 				return
@@ -107,6 +96,12 @@ func (c *BasicPlugin) Run(cliConnection plugin.CliConnection, args []string) {
 			resourceID := createDBInstanceResp.DBInstance.DbiResourceId
 			arn := createDBInstanceResp.DBInstance.DBInstanceArn
 			vpcSecGroups := createDBInstanceResp.DBInstance.VpcSecurityGroups
+
+			if len(vpcSecGroups) == 0 {
+				c.UI.DisplayError(errors.New("Error: do not have any VPC security groups to associate with RDS instance"))
+				return
+			}
+			secGroup := vpcSecGroups[0].VpcSecurityGroupId
 
 			dbI := DBInstance{
 				ResourceID: *resourceID,
@@ -124,11 +119,45 @@ func (c *BasicPlugin) Run(cliConnection plugin.CliConnection, args []string) {
 				return
 			}
 
-			if len(vpcSecGroups) == 0 {
-				c.UI.DisplayError(errors.New("Error: do not have any VPC security groups to associate with RDS instance"))
+			var dbAddr *string
+			var dbPort *int64
+
+			for {
+				describeDBInstancesResp, err := c.Svc.DescribeDBInstances(&rds.DescribeDBInstancesInput{
+					DBInstanceIdentifier: aws.String(args[2]),
+				})
+				if err != nil {
+					c.UI.DisplayError(err)
+					return
+				}
+
+				dbInstanceStatus := describeDBInstancesResp.DBInstances[0].DBInstanceStatus
+				if *dbInstanceStatus == "available" {
+					dbAddr = describeDBInstancesResp.DBInstances[0].Endpoint.Address
+					dbPort = describeDBInstancesResp.DBInstances[0].Endpoint.Port
+					break
+				}
+
+				nextCheckTime := time.Now().Add(c.WaitDuration)
+				c.UI.DisplayText("Checking connectivity... not available yet, will check again at {{.Time}}", map[string]interface{}{
+					"Time": nextCheckTime.Format("15:04:05"),
+				})
+				time.Sleep(1 * c.WaitDuration)
+			}
+
+			dbI = DBInstance{
+				ResourceID: *resourceID,
+				ARN: *arn,
+				DBURI: fmt.Sprintf("postgres://root:%s@%s:%d/%s", dbPassword, *dbAddr, *dbPort, dbName),
+			}
+
+			serviceInfo, err = json.Marshal(&dbI)
+			if err != nil {
+				c.UI.DisplayError(err)
 				return
 			}
-			secGroup := vpcSecGroups[0].VpcSecurityGroupId
+
+			_, err = cliConnection.CliCommand("uups", args[2], "-p", string(serviceInfo))
 
 			c.UI.DisplayText("Successfully created user-provided service {{.Name}} exposing RDS Instance {{.Name}}, {{.RDSID}} in AWS VPC {{.VPC}} with Security Group {{.SecGroup}}! You can bind this service to an app using `cf bind-service` or add it to the `services` section in your manifest.yml", map[string]interface{}{
 				"Name":     args[2],
@@ -171,19 +200,6 @@ func (c *BasicPlugin) Run(cliConnection plugin.CliConnection, args []string) {
 	}
 }
 
-// GetMetadata must be implemented as part of the plugin interface
-// defined by the core CLI.
-//
-// GetMetadata() returns a PluginMetadata struct. The first field, Name,
-// determines the name of the plugin which should generally be without spaces.
-// If there are spaces in the name a user will need to properly quote the name
-// during uninstall otherwise the name will be treated as separate arguments.
-// The second value is a slice of Command structs. Our slice only contains one
-// Command Struct, but could contain any number of them. The first field Name
-// defines the command `cf basic-plugin-command` once installed into the CLI. The
-// second field, HelpText, is used by the core CLI to display help information
-// to the user in the core commands `cf help`, `cf`, or `cf -h`.
-
 func (c *BasicPlugin) GetMetadata() plugin.PluginMetadata {
 	return plugin.PluginMetadata{
 		Name: "aws-plugin",
@@ -212,7 +228,7 @@ func (c *BasicPlugin) GetMetadata() plugin.PluginMetadata {
 	}
 }
 
-func GenerateRandomString() string {
+var GenerateRandomString = func() string {
 	rand.Seed(time.Now().UnixNano())
 	letterRunes := []rune("abcdefghijklmnopqrstuvwxyz")
 	b := make([]rune, 10)
@@ -223,7 +239,7 @@ func GenerateRandomString() string {
 	return string(b)
 }
 
-func GenerateRandomAlphanumericString() string {
+var GenerateRandomAlphanumericString = func() string {
 	rand.Seed(time.Now().UnixNano())
 	letterRunes := []rune("abcdefghijklmnopqrstuvwxyz1234567890")
 	b := make([]rune, 10)

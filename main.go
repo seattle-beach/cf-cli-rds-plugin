@@ -9,6 +9,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/rds"
 	"github.com/aws/aws-sdk-go/aws/endpoints"
+	"time"
 )
 
 type MyConfig struct {}
@@ -52,6 +53,7 @@ func main() {
 	rds_plugin := cf_rds.BasicPlugin{
 		UI: my_ui,
 		Svc: svc,
+		WaitDuration: time.Minute,
 	}
 	plugin.Start(&rds_plugin)
 	// Plugin code should be written in the Run([]string) method,

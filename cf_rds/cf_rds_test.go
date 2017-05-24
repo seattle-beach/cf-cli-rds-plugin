@@ -9,6 +9,7 @@ import (
 	"github.com/seattle-beach/cf-cli-rds-plugin/cf_rds/fakes"
 	"github.com/aws/aws-sdk-go/service/rds"
 	"github.com/aws/aws-sdk-go/aws"
+	"time"
 )
 
 var _ = Describe("CfRds", func() {
@@ -88,6 +89,7 @@ var _ = Describe("CfRds", func() {
 				p = &BasicPlugin{
 					UI: &ui,
 					Svc: fakeRDSSvc,
+					WaitDuration: time.Millisecond,
 				}
 				args = []string{"aws-rds", "create", "name"}
 
@@ -119,6 +121,36 @@ var _ = Describe("CfRds", func() {
 					},
 
 				}, nil)
+
+				fakeRDSSvc.DescribeDBInstancesStub = func(input *rds.DescribeDBInstancesInput) (*rds.DescribeDBInstancesOutput, error) {
+					if fakeRDSSvc.DescribeDBInstancesCallCount() < 5 {
+						return &rds.DescribeDBInstancesOutput{
+							DBInstances: []*rds.DBInstance{{
+								DBInstanceIdentifier: aws.String("resourceid"),
+								DBInstanceStatus: aws.String("creating"),
+							}},
+						}, nil
+					}
+
+					return &rds.DescribeDBInstancesOutput{
+						DBInstances: []*rds.DBInstance{{
+							DBInstanceIdentifier: aws.String("resourceid"),
+							DBInstanceStatus: aws.String("available"),
+							Endpoint: &rds.Endpoint {
+								Port: aws.Int64(5432),
+								Address: aws.String("test-uri.us-east-1.rds.amazonaws.com"),
+							},
+						}},
+					}, nil
+				}
+
+				GenerateRandomAlphanumericString = func() string {
+					return "password"
+				}
+
+				GenerateRandomString = func() string {
+					return "database"
+				}
 			})
 
 			It("lists the DB subnet groups in the user's account", func() {
@@ -154,7 +186,7 @@ var _ = Describe("CfRds", func() {
 
 			It("creates a user-provided service with the created RDS instance", func() {
 				p.Run(conn, args)
-				Expect(conn.CliCommandCallCount()).To(Equal(1))
+				Expect(conn.CliCommandCallCount()).To(Equal(2))
 
 				cupsArgs := conn.CliCommandArgsForCall(0)
 				Expect(len(cupsArgs)).To(Equal(4))
@@ -162,6 +194,25 @@ var _ = Describe("CfRds", func() {
 				Expect(cupsArgs[3]).To(MatchJSON(`{
 					"arn": "arn:aws:rds:us-east-1:10101010:db:name",
 					"resource_id": "resourceid"
+				}`))
+			})
+
+			It("polls for the db instance to be available", func() {
+				p.Run(conn, args)
+				Expect(fakeRDSSvc.DescribeDBInstancesCallCount()).To(Equal(5))
+			})
+
+			It("captures the uri and calls uups", func() {
+				p.Run(conn, args)
+				Expect(conn.CliCommandCallCount()).To(Equal(2))
+
+				uupsArgs := conn.CliCommandArgsForCall(1)
+				Expect(len(uupsArgs)).To(Equal(4))
+				Expect(uupsArgs[0:3]).To(Equal([]string{"uups", "name", "-p"}))
+				Expect(uupsArgs[3]).To(MatchJSON(`{
+					"arn": "arn:aws:rds:us-east-1:10101010:db:name",
+					"resource_id": "resourceid",
+					"uri": "postgres://root:password@test-uri.us-east-1.rds.amazonaws.com:5432/database"
 				}`))
 			})
 
