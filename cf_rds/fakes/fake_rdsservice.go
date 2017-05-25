@@ -48,6 +48,19 @@ type FakeRDSService struct {
 		result1 *rds.DescribeDBInstancesOutput
 		result2 error
 	}
+	ModifyDBInstanceStub        func(input *rds.ModifyDBInstanceInput) (*rds.ModifyDBInstanceOutput, error)
+	modifyDBInstanceMutex       sync.RWMutex
+	modifyDBInstanceArgsForCall []struct {
+		input *rds.ModifyDBInstanceInput
+	}
+	modifyDBInstanceReturns struct {
+		result1 *rds.ModifyDBInstanceOutput
+		result2 error
+	}
+	modifyDBInstanceReturnsOnCall map[int]struct {
+		result1 *rds.ModifyDBInstanceOutput
+		result2 error
+	}
 	invocations      map[string][][]interface{}
 	invocationsMutex sync.RWMutex
 }
@@ -205,6 +218,57 @@ func (fake *FakeRDSService) DescribeDBInstancesReturnsOnCall(i int, result1 *rds
 	}{result1, result2}
 }
 
+func (fake *FakeRDSService) ModifyDBInstance(input *rds.ModifyDBInstanceInput) (*rds.ModifyDBInstanceOutput, error) {
+	fake.modifyDBInstanceMutex.Lock()
+	ret, specificReturn := fake.modifyDBInstanceReturnsOnCall[len(fake.modifyDBInstanceArgsForCall)]
+	fake.modifyDBInstanceArgsForCall = append(fake.modifyDBInstanceArgsForCall, struct {
+		input *rds.ModifyDBInstanceInput
+	}{input})
+	fake.recordInvocation("ModifyDBInstance", []interface{}{input})
+	fake.modifyDBInstanceMutex.Unlock()
+	if fake.ModifyDBInstanceStub != nil {
+		return fake.ModifyDBInstanceStub(input)
+	}
+	if specificReturn {
+		return ret.result1, ret.result2
+	}
+	return fake.modifyDBInstanceReturns.result1, fake.modifyDBInstanceReturns.result2
+}
+
+func (fake *FakeRDSService) ModifyDBInstanceCallCount() int {
+	fake.modifyDBInstanceMutex.RLock()
+	defer fake.modifyDBInstanceMutex.RUnlock()
+	return len(fake.modifyDBInstanceArgsForCall)
+}
+
+func (fake *FakeRDSService) ModifyDBInstanceArgsForCall(i int) *rds.ModifyDBInstanceInput {
+	fake.modifyDBInstanceMutex.RLock()
+	defer fake.modifyDBInstanceMutex.RUnlock()
+	return fake.modifyDBInstanceArgsForCall[i].input
+}
+
+func (fake *FakeRDSService) ModifyDBInstanceReturns(result1 *rds.ModifyDBInstanceOutput, result2 error) {
+	fake.ModifyDBInstanceStub = nil
+	fake.modifyDBInstanceReturns = struct {
+		result1 *rds.ModifyDBInstanceOutput
+		result2 error
+	}{result1, result2}
+}
+
+func (fake *FakeRDSService) ModifyDBInstanceReturnsOnCall(i int, result1 *rds.ModifyDBInstanceOutput, result2 error) {
+	fake.ModifyDBInstanceStub = nil
+	if fake.modifyDBInstanceReturnsOnCall == nil {
+		fake.modifyDBInstanceReturnsOnCall = make(map[int]struct {
+			result1 *rds.ModifyDBInstanceOutput
+			result2 error
+		})
+	}
+	fake.modifyDBInstanceReturnsOnCall[i] = struct {
+		result1 *rds.ModifyDBInstanceOutput
+		result2 error
+	}{result1, result2}
+}
+
 func (fake *FakeRDSService) Invocations() map[string][][]interface{} {
 	fake.invocationsMutex.RLock()
 	defer fake.invocationsMutex.RUnlock()
@@ -214,6 +278,8 @@ func (fake *FakeRDSService) Invocations() map[string][][]interface{} {
 	defer fake.createDBInstanceMutex.RUnlock()
 	fake.describeDBInstancesMutex.RLock()
 	defer fake.describeDBInstancesMutex.RUnlock()
+	fake.modifyDBInstanceMutex.RLock()
+	defer fake.modifyDBInstanceMutex.RUnlock()
 	copiedInvocations := map[string][][]interface{}{}
 	for key, value := range fake.invocations {
 		copiedInvocations[key] = value

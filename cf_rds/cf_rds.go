@@ -20,8 +20,6 @@ type TinyUI interface {
 	DisplayText(template string, data ...map[string]interface{})
 }
 
-// BasicPlugin is the struct implementing the interface defined by the core CLI. It can
-// be found at  "code.cloudfoundry.org/cli/plugin/plugin.go"
 type BasicPlugin struct {
 	UI  TinyUI
 	Svc RDSService
@@ -32,6 +30,7 @@ type RDSService interface {
 	DescribeDBSubnetGroups(input *rds.DescribeDBSubnetGroupsInput) (*rds.DescribeDBSubnetGroupsOutput, error)
 	CreateDBInstance(input *rds.CreateDBInstanceInput) (*rds.CreateDBInstanceOutput, error)
 	DescribeDBInstances(input *rds.DescribeDBInstancesInput) (*rds.DescribeDBInstancesOutput, error)
+	ModifyDBInstance(input *rds.ModifyDBInstanceInput) (*rds.ModifyDBInstanceOutput, error)
 }
 
 type DBInstance struct {
@@ -43,6 +42,7 @@ type DBInstance struct {
 	Password string `json:"password,omitempty"`
 	DBName string `json:"database,omitempty"`
 	SecGroups []*rds.VpcSecurityGroupMembership `json:"-"`
+	VPCID string `json:"-"`
 }
 
 func (c *BasicPlugin) getSubnetGroups() ([]*rds.DBSubnetGroup, error) {
@@ -70,7 +70,7 @@ func (c *BasicPlugin) getSubnetGroups() ([]*rds.DBSubnetGroup, error) {
 	return subnetGroups, nil
 }
 
-func (c *BasicPlugin) createRDSInstance(instanceName string, subnetGroupName *string) (DBInstance, error) {
+func (c *BasicPlugin) createRDSInstance(instanceName string, subnetGroup *rds.DBSubnetGroup) (DBInstance, error) {
 	dbName := GenerateRandomString()
 	dbPassword := GenerateRandomAlphanumericString()
 
@@ -84,7 +84,7 @@ func (c *BasicPlugin) createRDSInstance(instanceName string, subnetGroupName *st
 		CopyTagsToSnapshot:      aws.Bool(true),
 		DBName:                  aws.String(dbName),
 		DBParameterGroupName:    aws.String("default.postgres9.6"),
-		DBSubnetGroupName:       subnetGroupName,
+		DBSubnetGroupName:       subnetGroup.DBSubnetGroupName,
 		MasterUserPassword:      aws.String(dbPassword),
 		MasterUsername:          aws.String("root"),
 		MultiAZ:                 aws.Bool(false),
@@ -108,13 +108,47 @@ func (c *BasicPlugin) createRDSInstance(instanceName string, subnetGroupName *st
 		Password: dbPassword,
 		DBName: dbName,
 		SecGroups: secGroups,
+		VPCID: *subnetGroup.VpcId,
 	}, nil
 }
 
-func (c *BasicPlugin) populateWhenReady(instance *DBInstance) error {
-	var dbAddr *string
-	var dbPort *int64
+func (c *BasicPlugin) updateRDSInstanceInfo(instance *DBInstance) error {
+	describeDBInstancesResp, err := c.Svc.DescribeDBInstances(&rds.DescribeDBInstancesInput{
+		DBInstanceIdentifier: aws.String(instance.InstanceName),
+	})
+	if err != nil {
+		return err
+	}
 
+	dbInstances := describeDBInstancesResp.DBInstances
+	newPassword := GenerateRandomAlphanumericString()
+	_, err = c.Svc.ModifyDBInstance(&rds.ModifyDBInstanceInput{
+		DBInstanceIdentifier: aws.String(instance.InstanceName),
+		MasterUserPassword: aws.String(newPassword),
+	})
+	if err != nil {
+		return err
+	}
+
+	instance.ARN = *dbInstances[0].DBInstanceArn
+	instance.ResourceID = *dbInstances[0].DbiResourceId
+	instance.Username = *dbInstances[0].MasterUsername
+	instance.DBName = *dbInstances[0].DBName
+	instance.Password = newPassword
+	instance.SecGroups = dbInstances[0].VpcSecurityGroups
+	instance.VPCID = *dbInstances[0].DBSubnetGroup.VpcId
+
+	dbAddr := dbInstances[0].Endpoint.Address
+	dbPort := dbInstances[0].Endpoint.Port
+	instance.DBURI = fmt.Sprintf("postgres://root:%s@%s:%d/%s", instance.Password, *dbAddr, *dbPort, instance.DBName)
+
+	inst := fmt.Sprintf("%+v\n", instance)
+	c.UI.DisplayText(inst, map[string]interface{}{})
+
+	return nil
+}
+
+func (c *BasicPlugin) populateURIWhenReady(instance *DBInstance) error {
 	for {
 		describeDBInstancesResp, err := c.Svc.DescribeDBInstances(&rds.DescribeDBInstancesInput{
 			DBInstanceIdentifier: aws.String(instance.InstanceName),
@@ -123,10 +157,16 @@ func (c *BasicPlugin) populateWhenReady(instance *DBInstance) error {
 			return err
 		}
 
-		dbInstanceStatus := describeDBInstancesResp.DBInstances[0].DBInstanceStatus
+		dbInstances := describeDBInstancesResp.DBInstances
+		if len(dbInstances) == 0 {
+			return fmt.Errorf("Could not find db instance %s", instance.InstanceName)
+		}
+
+		dbInstanceStatus := dbInstances[0].DBInstanceStatus
 		if *dbInstanceStatus == "available" {
-			dbAddr = describeDBInstancesResp.DBInstances[0].Endpoint.Address
-			dbPort = describeDBInstancesResp.DBInstances[0].Endpoint.Port
+			dbAddr := dbInstances[0].Endpoint.Address
+			dbPort := dbInstances[0].Endpoint.Port
+			instance.DBURI = fmt.Sprintf("postgres://root:%s@%s:%d/%s", instance.Password, *dbAddr, *dbPort, instance.DBName)
 			break
 		}
 
@@ -137,13 +177,10 @@ func (c *BasicPlugin) populateWhenReady(instance *DBInstance) error {
 		time.Sleep(1 * c.WaitDuration)
 	}
 
-	instance.DBURI = fmt.Sprintf("postgres://root:%s@%s:%d/%s", instance.Password, *dbAddr, *dbPort, instance.DBName)
-
 	return nil
 }
 
 func (c *BasicPlugin) Run(cliConnection plugin.CliConnection, args []string) {
-	// Ensure that we called the command basic-plugin-command
 	if args[0] == "aws-rds" {
 		if len(args) > 2 && args[1] == "create" {
 			serviceName := args[2]
@@ -153,7 +190,7 @@ func (c *BasicPlugin) Run(cliConnection plugin.CliConnection, args []string) {
 				return
 			}
 
-			dbInstance, err := c.createRDSInstance(serviceName, subnetGroups[0].DBSubnetGroupName)
+			dbInstance, err := c.createRDSInstance(serviceName, subnetGroups[0])
 			if err != nil {
 				c.UI.DisplayError(err)
 				return
@@ -171,7 +208,11 @@ func (c *BasicPlugin) Run(cliConnection plugin.CliConnection, args []string) {
 				return
 			}
 
-			c.populateWhenReady(&dbInstance)
+			err = c.populateURIWhenReady(&dbInstance)
+			if err != nil {
+				c.UI.DisplayError(err)
+				return
+			}
 
 			serviceInfo, err = json.Marshal(&dbInstance)
 			if err != nil {
@@ -188,7 +229,45 @@ func (c *BasicPlugin) Run(cliConnection plugin.CliConnection, args []string) {
 			c.UI.DisplayText("Successfully created user-provided service {{.Name}} exposing RDS Instance {{.Name}}, {{.RDSID}} in AWS VPC {{.VPC}} with Security Group {{.SecGroup}}! You can bind this service to an app using `cf bind-service` or add it to the `services` section in your manifest.yml", map[string]interface{}{
 				"Name":     serviceName,
 				"RDSID":    dbInstance.ResourceID,
-				"VPC":      *subnetGroups[0].VpcId,
+				"VPC":      dbInstance.VPCID,
+				"SecGroup": *dbInstance.SecGroups[0].VpcSecurityGroupId,
+			})
+			return
+		}
+
+		if len(args) > 2 && args[1] == "refresh" {
+			name := args[2]
+			dbInstance := &DBInstance{}
+			dbInstance.InstanceName = name
+
+			err := c.populateURIWhenReady(dbInstance)
+			if err != nil {
+				c.UI.DisplayError(err)
+				return
+			}
+
+			err = c.updateRDSInstanceInfo(dbInstance)
+			if err != nil {
+				c.UI.DisplayError(err)
+				return
+			}
+
+			serviceInfo, err := json.Marshal(dbInstance)
+			if err != nil {
+				c.UI.DisplayError(err)
+				return
+			}
+
+			_, err = cliConnection.CliCommand("uups", name, "-p", string(serviceInfo))
+			if err != nil {
+				c.UI.DisplayError(err)
+				return
+			}
+
+			c.UI.DisplayText("Successfully created user-provided service {{.Name}} exposing RDS Instance {{.Name}}, {{.RDSID}} in AWS VPC {{.VPC}} with Security Group {{.SecGroup}}! You can bind this service to an app using `cf bind-service` or add it to the `services` section in your manifest.yml", map[string]interface{}{
+				"Name":     name,
+				"RDSID":    dbInstance.ResourceID,
+				"VPC":      dbInstance.VPCID,
 				"SecGroup": *dbInstance.SecGroups[0].VpcSecurityGroupId,
 			})
 			return
@@ -220,7 +299,7 @@ func (c *BasicPlugin) Run(cliConnection plugin.CliConnection, args []string) {
 			return
 		}
 
-		c.UI.DisplayError(errors.New(fmt.Sprintf("%s\n%s", "Usage: cf aws-rds register NAME --uri URI",
+		c.UI.DisplayError(errors.New(fmt.Sprintf("Usage:\n%s\n%s", "cf aws-rds register NAME --uri URI",
 			"cf aws-rds create NAME")))
 		return
 	}
