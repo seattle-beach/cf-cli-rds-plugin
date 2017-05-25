@@ -203,7 +203,7 @@ var _ = Describe("CfRds", func() {
 
 			It("polls for the db instance to be available", func() {
 				p.Run(conn, args)
-				Expect(fakeRDSSvc.DescribeDBInstancesCallCount()).To(Equal(5))
+				Expect(fakeRDSSvc.DescribeDBInstancesCallCount()).To(Equal(6))
 			})
 
 			It("captures the uri and calls uups", func() {

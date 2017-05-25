@@ -112,7 +112,7 @@ func (c *BasicPlugin) createRDSInstance(instanceName string, subnetGroup *rds.DB
 	}, nil
 }
 
-func (c *BasicPlugin) updateRDSInstanceInfo(instance *DBInstance) error {
+func (c *BasicPlugin) refreshRDSInstanceInfo(instance *DBInstance) error {
 	describeDBInstancesResp, err := c.Svc.DescribeDBInstances(&rds.DescribeDBInstancesInput{
 		DBInstanceIdentifier: aws.String(instance.InstanceName),
 	})
@@ -142,13 +142,26 @@ func (c *BasicPlugin) updateRDSInstanceInfo(instance *DBInstance) error {
 	dbPort := dbInstances[0].Endpoint.Port
 	instance.DBURI = fmt.Sprintf("postgres://root:%s@%s:%d/%s", instance.Password, *dbAddr, *dbPort, instance.DBName)
 
-	inst := fmt.Sprintf("%+v\n", instance)
-	c.UI.DisplayText(inst, map[string]interface{}{})
+	return nil
+}
+
+func (c *BasicPlugin) populateURIAfterCreate(instance *DBInstance) error {
+	describeDBInstancesResp, err := c.Svc.DescribeDBInstances(&rds.DescribeDBInstancesInput{
+		DBInstanceIdentifier: aws.String(instance.InstanceName),
+	})
+	if err != nil {
+		return err
+	}
+
+	dbInstances := describeDBInstancesResp.DBInstances
+	dbAddr := dbInstances[0].Endpoint.Address
+	dbPort := dbInstances[0].Endpoint.Port
+	instance.DBURI = fmt.Sprintf("postgres://root:%s@%s:%d/%s", instance.Password, *dbAddr, *dbPort, instance.DBName)
 
 	return nil
 }
 
-func (c *BasicPlugin) populateURIWhenReady(instance *DBInstance) error {
+func (c *BasicPlugin) pollUntilDBAvailable(instance *DBInstance) error {
 	for {
 		describeDBInstancesResp, err := c.Svc.DescribeDBInstances(&rds.DescribeDBInstancesInput{
 			DBInstanceIdentifier: aws.String(instance.InstanceName),
@@ -164,9 +177,6 @@ func (c *BasicPlugin) populateURIWhenReady(instance *DBInstance) error {
 
 		dbInstanceStatus := dbInstances[0].DBInstanceStatus
 		if *dbInstanceStatus == "available" {
-			dbAddr := dbInstances[0].Endpoint.Address
-			dbPort := dbInstances[0].Endpoint.Port
-			instance.DBURI = fmt.Sprintf("postgres://root:%s@%s:%d/%s", instance.Password, *dbAddr, *dbPort, instance.DBName)
 			break
 		}
 
@@ -208,7 +218,13 @@ func (c *BasicPlugin) Run(cliConnection plugin.CliConnection, args []string) {
 				return
 			}
 
-			err = c.populateURIWhenReady(&dbInstance)
+			err = c.pollUntilDBAvailable(&dbInstance)
+			if err != nil {
+				c.UI.DisplayError(err)
+				return
+			}
+
+			err = c.populateURIAfterCreate(&dbInstance)
 			if err != nil {
 				c.UI.DisplayError(err)
 				return
@@ -240,13 +256,13 @@ func (c *BasicPlugin) Run(cliConnection plugin.CliConnection, args []string) {
 			dbInstance := &DBInstance{}
 			dbInstance.InstanceName = name
 
-			err := c.populateURIWhenReady(dbInstance)
+			err := c.pollUntilDBAvailable(dbInstance)
 			if err != nil {
 				c.UI.DisplayError(err)
 				return
 			}
 
-			err = c.updateRDSInstanceInfo(dbInstance)
+			err = c.refreshRDSInstanceInfo(dbInstance)
 			if err != nil {
 				c.UI.DisplayError(err)
 				return
