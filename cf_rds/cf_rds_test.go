@@ -6,10 +6,11 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	. "github.com/seattle-beach/cf-cli-rds-plugin/cf_rds"
-	"github.com/seattle-beach/cf-cli-rds-plugin/cf_rds/fakes"
+	"github.com/seattle-beach/cf-cli-rds-plugin/api/fakes"
 	"github.com/aws/aws-sdk-go/service/rds"
 	"github.com/aws/aws-sdk-go/aws"
 	"time"
+	"github.com/seattle-beach/cf-cli-rds-plugin/api"
 )
 
 var _ = Describe("CfRds", func() {
@@ -77,6 +78,7 @@ var _ = Describe("CfRds", func() {
 		Context("create", func() {
 			var ui MockUi
 			var conn *pluginfakes.FakeCliConnection
+			var cfrdsapi *api.CfRDSApi
 			var fakeRDSSvc *fakes.FakeRDSService
 			var p *BasicPlugin
 			var args []string
@@ -86,9 +88,14 @@ var _ = Describe("CfRds", func() {
 				ui = MockUi{}
 				fakeRDSSvc = &fakes.FakeRDSService{}
 
+				cfrdsapi = &api.CfRDSApi {
+					Svc: fakeRDSSvc,
+					WaitDuration: time.Millisecond,
+				}
+
 				p = &BasicPlugin{
 					UI: &ui,
-					Svc: fakeRDSSvc,
+					Api: cfrdsapi,
 					WaitDuration: time.Millisecond,
 				}
 				args = []string{"aws-rds", "create", "name"}
@@ -144,11 +151,11 @@ var _ = Describe("CfRds", func() {
 					}, nil
 				}
 
-				GenerateRandomAlphanumericString = func() string {
+				api.GenerateRandomAlphanumericString = func() string {
 					return "password"
 				}
 
-				GenerateRandomString = func() string {
+				api.GenerateRandomString = func() string {
 					return "database"
 				}
 			})
@@ -178,6 +185,7 @@ var _ = Describe("CfRds", func() {
 				Expect(createDBInstanceInput.DBInstanceClass).To(Equal(aws.String("db.t2.micro")))
 				Expect(createDBInstanceInput.DBInstanceIdentifier).To(Equal(aws.String("name")))
 				Expect(createDBInstanceInput.Engine).To(Equal(aws.String("postgres")))
+				Expect(createDBInstanceInput.DBParameterGroupName).To(Equal(aws.String("default.postgres9.6")))
 				Expect(createDBInstanceInput.AllocatedStorage).To(Equal(aws.Int64(20)))
 				Expect(createDBInstanceInput.AvailabilityZone).To(Equal(aws.String("us-east-1a")))
 				Expect(createDBInstanceInput.DBSubnetGroupName).To(Equal(aws.String("default-vpc-vpcid")))
@@ -193,17 +201,13 @@ var _ = Describe("CfRds", func() {
 				Expect(cupsArgs[0:3]).To(Equal([]string{"cups", "name", "-p"}))
 				Expect(cupsArgs[3]).To(MatchJSON(`{
 					"instance_id": "name",
-					"arn": "arn:aws:rds:us-east-1:10101010:db:name",
-					"resource_id": "resourceid",
-					"username": "root",
-					"password": "password",
-					"database": "database"
+					"username": "root"
 				}`))
 			})
 
 			It("polls for the db instance to be available", func() {
 				p.Run(conn, args)
-				Expect(fakeRDSSvc.DescribeDBInstancesCallCount()).To(Equal(6))
+				Expect(fakeRDSSvc.DescribeDBInstancesCallCount()).To(Equal(5))
 			})
 
 			It("captures the uri and calls uups", func() {
@@ -269,6 +273,7 @@ var _ = Describe("CfRds", func() {
 		Context("refresh", func() {
 			var ui MockUi
 			var conn *pluginfakes.FakeCliConnection
+			var cfrdsapi *api.CfRDSApi
 			var fakeRDSSvc *fakes.FakeRDSService
 			var p *BasicPlugin
 			var args []string
@@ -278,9 +283,14 @@ var _ = Describe("CfRds", func() {
 				ui = MockUi{}
 				fakeRDSSvc = &fakes.FakeRDSService{}
 
+				cfrdsapi = &api.CfRDSApi {
+					Svc: fakeRDSSvc,
+					WaitDuration: time.Millisecond,
+				}
+
 				p = &BasicPlugin{
 					UI: &ui,
-					Svc: fakeRDSSvc,
+					Api: cfrdsapi,
 					WaitDuration: time.Millisecond,
 				}
 				args = []string{"aws-rds", "refresh", "name"}
@@ -291,6 +301,18 @@ var _ = Describe("CfRds", func() {
 							DBInstances: []*rds.DBInstance{{
 								DBInstanceIdentifier: aws.String("name"),
 								DBInstanceStatus: aws.String("creating"),
+								DBInstanceArn: aws.String("arn:aws:rds:us-east-1:10101010:db:name"),
+								DbiResourceId: aws.String("resourceid"),
+								MasterUsername: aws.String("root"),
+								DBName: aws.String("database"),
+								VpcSecurityGroups: []*rds.VpcSecurityGroupMembership {{
+									VpcSecurityGroupId: aws.String("vpcgroup"),
+								}},
+								DBSubnetGroup: &rds.DBSubnetGroup{
+									DBSubnetGroupName: aws.String("default-vpc-vpcid"),
+									VpcId: aws.String("vpcid"),
+								},
+								Engine: aws.String("postgres"),
 							}},
 						}, nil
 					}
@@ -303,24 +325,13 @@ var _ = Describe("CfRds", func() {
 								Port: aws.Int64(5432),
 								Address: aws.String("test-uri.us-east-1.rds.amazonaws.com"),
 							},
-							DBInstanceArn: aws.String("arn:aws:rds:us-east-1:10101010:db:name"),
-							DbiResourceId: aws.String("resourceid"),
-							MasterUsername: aws.String("root"),
-							DBName: aws.String("database"),
-							VpcSecurityGroups: []*rds.VpcSecurityGroupMembership {{
-								VpcSecurityGroupId: aws.String("vpcgroup"),
-							}},
-							DBSubnetGroup: &rds.DBSubnetGroup{
-								DBSubnetGroupName: aws.String("default-vpc-vpcid"),
-								VpcId: aws.String("vpcid"),
-							},
 						}},
 					}, nil
 				}
 
 				fakeRDSSvc.ModifyDBInstanceReturns(&rds.ModifyDBInstanceOutput{}, nil)
 
-				GenerateRandomAlphanumericString = func() string {
+				api.GenerateRandomAlphanumericString = func() string {
 					return "password2"
 				}
 			})
@@ -336,7 +347,7 @@ var _ = Describe("CfRds", func() {
 
 			It("restarts the polling process", func() {
 				p.Run(conn, args)
-				Expect(fakeRDSSvc.DescribeDBInstancesCallCount()).To(Equal(6))
+				Expect(fakeRDSSvc.DescribeDBInstancesCallCount()).To(Equal(5))
 			})
 
 			It("captures the uri and calls uups", func() {

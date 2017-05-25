@@ -10,6 +10,7 @@ import (
 	"github.com/aws/aws-sdk-go/service/rds"
 	"github.com/aws/aws-sdk-go/aws/endpoints"
 	"time"
+	"github.com/seattle-beach/cf-cli-rds-plugin/api"
 )
 
 type MyConfig struct {}
@@ -50,9 +51,14 @@ func main() {
 	}))
 
 	svc := rds.New(sess)
+	cfrdsapi := &api.CfRDSApi{
+		Svc: svc,
+		WaitDuration: 30 * time.Second,
+	}
+
 	rds_plugin := cf_rds.BasicPlugin{
 		UI: my_ui,
-		Svc: svc,
+		Api: cfrdsapi,
 		WaitDuration: time.Minute,
 	}
 	plugin.Start(&rds_plugin)

@@ -5,7 +5,7 @@ import (
 	"sync"
 
 	"github.com/aws/aws-sdk-go/service/rds"
-	"github.com/seattle-beach/cf-cli-rds-plugin/cf_rds"
+	"github.com/seattle-beach/cf-cli-rds-plugin/api"
 )
 
 type FakeRDSService struct {
@@ -299,4 +299,4 @@ func (fake *FakeRDSService) recordInvocation(key string, args []interface{}) {
 	fake.invocations[key] = append(fake.invocations[key], args)
 }
 
-var _ cf_rds.RDSService = new(FakeRDSService)
+var _ api.RDSService = new(FakeRDSService)
