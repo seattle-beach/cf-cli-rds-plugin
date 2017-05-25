@@ -317,7 +317,6 @@ func (c *BasicPlugin) Run(cliConnection plugin.CliConnection, args []string) {
 
 		c.UI.DisplayError(errors.New(fmt.Sprintf("Usage:\n%s\n%s", "cf aws-rds register NAME --uri URI",
 			"cf aws-rds create NAME")))
-		return
 	}
 }
 
