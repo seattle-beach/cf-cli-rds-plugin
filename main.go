@@ -53,7 +53,6 @@ func main() {
 	svc := rds.New(sess)
 	cfrdsapi := &api.CfRDSApi{
 		Svc: svc,
-		WaitDuration: 30 * time.Second,
 	}
 
 	rds_plugin := cf_rds.BasicPlugin{

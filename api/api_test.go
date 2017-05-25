@@ -7,7 +7,6 @@ import (
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/seattle-beach/cf-cli-rds-plugin/api/fakes"
 	"github.com/seattle-beach/cf-cli-rds-plugin/api"
-	"time"
 )
 
 var _ = Describe("Api", func() {
@@ -18,7 +17,6 @@ var _ = Describe("Api", func() {
 		fakeRDSSvc = &fakes.FakeRDSService{}
 		cfRDSApi = &api.CfRDSApi{
 			Svc: fakeRDSSvc,
-			WaitDuration: time.Millisecond,
 		}
 	})
 
@@ -106,15 +104,6 @@ var _ = Describe("Api", func() {
 			}, nil)
 
 			fakeRDSSvc.DescribeDBInstancesStub = func(input *rds.DescribeDBInstancesInput) (*rds.DescribeDBInstancesOutput, error) {
-				if fakeRDSSvc.DescribeDBInstancesCallCount() < 5 {
-					return &rds.DescribeDBInstancesOutput{
-						DBInstances: []*rds.DBInstance{{
-							DBInstanceIdentifier: aws.String("test-instance"),
-							DBInstanceStatus: aws.String("creating"),
-						}},
-					}, nil
-				}
-
 				return &rds.DescribeDBInstancesOutput{
 					DBInstances: []*rds.DBInstance{{
 						DBInstanceIdentifier: aws.String("test-instance"),
@@ -127,6 +116,7 @@ var _ = Describe("Api", func() {
 				}, nil
 			}
 
+			fakeRDSSvc.WaitUntilDBInstanceAvailableReturns(nil)
 
 			api.GenerateRandomAlphanumericString = func() string {
 				return "password"
@@ -166,8 +156,9 @@ var _ = Describe("Api", func() {
 			err := <- errChan
 			Expect(err).NotTo(HaveOccurred())
 
-			Expect(fakeRDSSvc.DescribeDBInstancesCallCount()).To(Equal(5))
 			Expect(instance.DBURI).To(Equal("postgres://root:password@test-uri.us-east-1.rds.amazonaws.com:5432/database"))
+
+			Expect(fakeRDSSvc.WaitUntilDBInstanceAvailableCallCount()).To(Equal(1))
 		})
 	})
 
@@ -180,27 +171,6 @@ var _ = Describe("Api", func() {
 			}
 
 			fakeRDSSvc.DescribeDBInstancesStub = func(input *rds.DescribeDBInstancesInput) (*rds.DescribeDBInstancesOutput, error) {
-				if fakeRDSSvc.DescribeDBInstancesCallCount() < 5 {
-					return &rds.DescribeDBInstancesOutput{
-						DBInstances: []*rds.DBInstance{{
-							DBInstanceIdentifier: aws.String("test-instance"),
-							DBInstanceStatus: aws.String("creating"),
-							DBInstanceArn: aws.String("arn:aws:rds:us-east-1:10101010:db:name"),
-							DbiResourceId: aws.String("resourceid"),
-							MasterUsername: aws.String("root"),
-							DBName: aws.String("database"),
-							VpcSecurityGroups: []*rds.VpcSecurityGroupMembership {{
-								VpcSecurityGroupId: aws.String("vpcgroup"),
-							}},
-							DBSubnetGroup: &rds.DBSubnetGroup{
-								DBSubnetGroupName: aws.String("default-vpc-vpcid"),
-								VpcId: aws.String("vpcid"),
-							},
-							Engine: aws.String("postgres"),
-						}},
-					}, nil
-				}
-
 				return &rds.DescribeDBInstancesOutput{
 					DBInstances: []*rds.DBInstance{{
 						DBInstanceIdentifier: aws.String("test-instance"),
@@ -209,10 +179,23 @@ var _ = Describe("Api", func() {
 							Port: aws.Int64(5432),
 							Address: aws.String("test-uri.us-east-1.rds.amazonaws.com"),
 						},
+						DBInstanceArn: aws.String("arn:aws:rds:us-east-1:10101010:db:name"),
+						DbiResourceId: aws.String("resourceid"),
+						MasterUsername: aws.String("root"),
+						DBName: aws.String("database"),
+						VpcSecurityGroups: []*rds.VpcSecurityGroupMembership {{
+							VpcSecurityGroupId: aws.String("vpcgroup"),
+						}},
+						DBSubnetGroup: &rds.DBSubnetGroup{
+							DBSubnetGroupName: aws.String("default-vpc-vpcid"),
+							VpcId: aws.String("vpcid"),
+						},
+						Engine: aws.String("postgres"),
 					}},
 				}, nil
 			}
 
+			fakeRDSSvc.WaitUntilDBInstanceAvailableReturns(nil)
 
 			api.GenerateRandomAlphanumericString = func() string {
 				return "password_reset"
@@ -224,7 +207,7 @@ var _ = Describe("Api", func() {
 			err := <-errChan
 			Expect(err).NotTo(HaveOccurred())
 
-			Expect(fakeRDSSvc.DescribeDBInstancesCallCount()).To(Equal(5))
+			Expect(fakeRDSSvc.WaitUntilDBInstanceAvailableCallCount()).To(Equal(1))
 			Expect(instance.ARN).To(Equal("arn:aws:rds:us-east-1:10101010:db:name"))
 			Expect(instance.ResourceID).To(Equal("resourceid"))
 			Expect(instance.SecGroups).To(Equal([]*rds.VpcSecurityGroupMembership{{
@@ -245,6 +228,7 @@ var _ = Describe("Api", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			Expect(fakeRDSSvc.ModifyDBInstanceCallCount()).To(Equal(1))
+
 			Expect(fakeRDSSvc.ModifyDBInstanceArgsForCall(0)).To(Equal(&rds.ModifyDBInstanceInput{
 				DBInstanceIdentifier: aws.String("test-instance"),
 				MasterUserPassword: aws.String("password_reset"),

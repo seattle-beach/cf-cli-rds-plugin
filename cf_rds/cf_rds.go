@@ -67,8 +67,8 @@ func (c *BasicPlugin) waitForApiResponse(instance *api.DBInstance, errChan chan 
 				return
 			}
 
-			c.UI.DisplayText("Successfully created user-provided service {{.Name}} exposing RDS Instance {{.Name}}, {{.RDSID}} in AWS VPC {{.VPC}} with Security Group {{.SecGroup}}! You can bind this service to an app using `cf bind-service` or add it to the `services` section in your manifest.yml", map[string]interface{}{
-				"Name":     instance.InstanceName,
+			c.UI.DisplayText("Successfully created user-provided service {{.ServiceName}} exposing RDS Instance {{.Name}}, {{.RDSID}} in AWS VPC {{.VPC}} with Security Group {{.SecGroup}}! You can bind this service to an app using `cf bind-service` or add it to the `services` section in your manifest.yml", map[string]interface{}{
+				"ServiceName":     instance.InstanceName,
 				"RDSID":    instance.ResourceID,
 				"VPC":      *instance.SubnetGroup.VpcId,
 				"SecGroup": *instance.SecGroups[0].VpcSecurityGroupId,
@@ -117,9 +117,10 @@ func (c *BasicPlugin) Run(cliConnection plugin.CliConnection, args []string) {
 		}
 
 		if len(args) > 2 && args[1] == "refresh" {
-			name := args[2]
-			dbInstance := &api.DBInstance{}
-			dbInstance.InstanceName = name
+			serviceName := args[2]
+			dbInstance := &api.DBInstance{
+				InstanceName: serviceName,
+			}
 
 			errChan := c.Api.RefreshInstance(dbInstance)
 			c.waitForApiResponse(dbInstance, errChan, cliConnection)
@@ -127,11 +128,11 @@ func (c *BasicPlugin) Run(cliConnection plugin.CliConnection, args []string) {
 		}
 
 		if len(args) == 5 && args[1] == "register" && args[3] == "--uri" {
-			name := args[2]
+			serviceName := args[2]
 			uri, _ := json.Marshal(&UpsOption{
 				Uri: args[4],
 			})
-			_, err := cliConnection.CliCommand("cups", name, "-p", string(uri))
+			_, err := cliConnection.CliCommand("cups", serviceName, "-p", string(uri))
 			if err != nil {
 				c.UI.DisplayError(err)
 				return
@@ -143,17 +144,20 @@ func (c *BasicPlugin) Run(cliConnection plugin.CliConnection, args []string) {
 				return
 			}
 
-			c.UI.DisplayText("Successfully created user-provided service {{.Name}} in space {{.Space}}! You can bind this service to an app using `cf bind-service` or add it to the `services` section in your manifest.yml",
+			c.UI.DisplayText("Successfully created user-provided service {{.ServiceName}} in space {{.Space}}! You can bind this service to an app using `cf bind-service` or add it to the `services` section in your manifest.yml",
 				map[string]interface{}{
-					"Name":  name,
+					"ServiceName":  serviceName,
 					"Space": space.Name,
 				},
 			)
 			return
 		}
 
-		c.UI.DisplayError(errors.New(fmt.Sprintf("Usage:\n%s\n%s", "cf aws-rds register NAME --uri URI",
-			"cf aws-rds create NAME")))
+		c.UI.DisplayError(errors.New(fmt.Sprintf("Usage:\n%s\n%s\n%s",
+			"cf aws-rds register SERVICE_NAME --uri URI",
+			"cf aws-rds create SERVICE_NAME",
+			"cf aws-rds refresh SERVICE_NAME",
+		)))
 	}
 }
 
@@ -175,8 +179,6 @@ func (c *BasicPlugin) GetMetadata() plugin.PluginMetadata {
 				Name:     "aws-rds",
 				HelpText: "plugin to hook up rds to pws",
 
-				// UsageDetails is optional
-				// It is used to show help of usage of each command
 				UsageDetails: plugin.Usage{
 					Usage: "aws-rds\n   cf aws-rds",
 				},

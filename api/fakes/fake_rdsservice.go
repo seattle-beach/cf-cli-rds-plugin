@@ -61,6 +61,17 @@ type FakeRDSService struct {
 		result1 *rds.ModifyDBInstanceOutput
 		result2 error
 	}
+	WaitUntilDBInstanceAvailableStub        func(input *rds.DescribeDBInstancesInput) error
+	waitUntilDBInstanceAvailableMutex       sync.RWMutex
+	waitUntilDBInstanceAvailableArgsForCall []struct {
+		input *rds.DescribeDBInstancesInput
+	}
+	waitUntilDBInstanceAvailableReturns struct {
+		result1 error
+	}
+	waitUntilDBInstanceAvailableReturnsOnCall map[int]struct {
+		result1 error
+	}
 	invocations      map[string][][]interface{}
 	invocationsMutex sync.RWMutex
 }
@@ -269,6 +280,54 @@ func (fake *FakeRDSService) ModifyDBInstanceReturnsOnCall(i int, result1 *rds.Mo
 	}{result1, result2}
 }
 
+func (fake *FakeRDSService) WaitUntilDBInstanceAvailable(input *rds.DescribeDBInstancesInput) error {
+	fake.waitUntilDBInstanceAvailableMutex.Lock()
+	ret, specificReturn := fake.waitUntilDBInstanceAvailableReturnsOnCall[len(fake.waitUntilDBInstanceAvailableArgsForCall)]
+	fake.waitUntilDBInstanceAvailableArgsForCall = append(fake.waitUntilDBInstanceAvailableArgsForCall, struct {
+		input *rds.DescribeDBInstancesInput
+	}{input})
+	fake.recordInvocation("WaitUntilDBInstanceAvailable", []interface{}{input})
+	fake.waitUntilDBInstanceAvailableMutex.Unlock()
+	if fake.WaitUntilDBInstanceAvailableStub != nil {
+		return fake.WaitUntilDBInstanceAvailableStub(input)
+	}
+	if specificReturn {
+		return ret.result1
+	}
+	return fake.waitUntilDBInstanceAvailableReturns.result1
+}
+
+func (fake *FakeRDSService) WaitUntilDBInstanceAvailableCallCount() int {
+	fake.waitUntilDBInstanceAvailableMutex.RLock()
+	defer fake.waitUntilDBInstanceAvailableMutex.RUnlock()
+	return len(fake.waitUntilDBInstanceAvailableArgsForCall)
+}
+
+func (fake *FakeRDSService) WaitUntilDBInstanceAvailableArgsForCall(i int) *rds.DescribeDBInstancesInput {
+	fake.waitUntilDBInstanceAvailableMutex.RLock()
+	defer fake.waitUntilDBInstanceAvailableMutex.RUnlock()
+	return fake.waitUntilDBInstanceAvailableArgsForCall[i].input
+}
+
+func (fake *FakeRDSService) WaitUntilDBInstanceAvailableReturns(result1 error) {
+	fake.WaitUntilDBInstanceAvailableStub = nil
+	fake.waitUntilDBInstanceAvailableReturns = struct {
+		result1 error
+	}{result1}
+}
+
+func (fake *FakeRDSService) WaitUntilDBInstanceAvailableReturnsOnCall(i int, result1 error) {
+	fake.WaitUntilDBInstanceAvailableStub = nil
+	if fake.waitUntilDBInstanceAvailableReturnsOnCall == nil {
+		fake.waitUntilDBInstanceAvailableReturnsOnCall = make(map[int]struct {
+			result1 error
+		})
+	}
+	fake.waitUntilDBInstanceAvailableReturnsOnCall[i] = struct {
+		result1 error
+	}{result1}
+}
+
 func (fake *FakeRDSService) Invocations() map[string][][]interface{} {
 	fake.invocationsMutex.RLock()
 	defer fake.invocationsMutex.RUnlock()
@@ -280,6 +339,8 @@ func (fake *FakeRDSService) Invocations() map[string][][]interface{} {
 	defer fake.describeDBInstancesMutex.RUnlock()
 	fake.modifyDBInstanceMutex.RLock()
 	defer fake.modifyDBInstanceMutex.RUnlock()
+	fake.waitUntilDBInstanceAvailableMutex.RLock()
+	defer fake.waitUntilDBInstanceAvailableMutex.RUnlock()
 	copiedInvocations := map[string][][]interface{}{}
 	for key, value := range fake.invocations {
 		copiedInvocations[key] = value

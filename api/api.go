@@ -14,6 +14,7 @@ type RDSService interface {
 	CreateDBInstance(input *rds.CreateDBInstanceInput) (*rds.CreateDBInstanceOutput, error)
 	DescribeDBInstances(input *rds.DescribeDBInstancesInput) (*rds.DescribeDBInstancesOutput, error)
 	ModifyDBInstance(input *rds.ModifyDBInstanceInput) (*rds.ModifyDBInstanceOutput, error)
+	WaitUntilDBInstanceAvailable(input *rds.DescribeDBInstancesInput) error
 }
 
 type Api interface {
@@ -24,7 +25,6 @@ type Api interface {
 
 type CfRDSApi struct {
 	Svc RDSService
-	WaitDuration time.Duration
 }
 
 type DBInstance struct {
@@ -152,42 +152,45 @@ func (f *CfRDSApi) RefreshInstance(instance *DBInstance) chan error {
 }
 
 func (f *CfRDSApi) waitForInstance(instance *DBInstance, errChan chan error, generateNewPassword bool) {
-	for {
-		describeDBInstancesResp, err := f.Svc.DescribeDBInstances(&rds.DescribeDBInstancesInput{
-			DBInstanceIdentifier: aws.String(instance.InstanceName),
-		})
-		if err != nil {
-			errChan <- err
-			break
-		}
+	err := f.Svc.WaitUntilDBInstanceAvailable(&rds.DescribeDBInstancesInput{
+		DBInstanceIdentifier: aws.String(instance.InstanceName),
+	})
+	if err != nil {
+		errChan <- err
+		return
+	}
 
-		dbInstances := describeDBInstancesResp.DBInstances
-		if len(dbInstances) == 0 {
-			errChan <- fmt.Errorf("Could not find db instance %s", instance.InstanceName)
-			break
-		}
+	describeDBInstancesResp, err := f.Svc.DescribeDBInstances(&rds.DescribeDBInstancesInput{
+		DBInstanceIdentifier: aws.String(instance.InstanceName),
+	})
+	if err != nil {
+		errChan <- err
+		return
+	}
 
-		dbInstanceStatus := dbInstances[0].DBInstanceStatus
-		if *dbInstanceStatus == "available" {
-			if generateNewPassword {
-				instance.Password = GenerateRandomAlphanumericString()
-				_, err = f.Svc.ModifyDBInstance(&rds.ModifyDBInstanceInput{
-					DBInstanceIdentifier: aws.String(instance.InstanceName),
-					MasterUserPassword: aws.String(instance.Password),
-				})
-				if err != nil {
-					errChan <- err
-					break
-				}
+	dbInstances := describeDBInstancesResp.DBInstances
+	if len(dbInstances) == 0 {
+		errChan <- fmt.Errorf("Could not find db instance %s", instance.InstanceName)
+		return
+	}
+
+	dbInstanceStatus := dbInstances[0].DBInstanceStatus
+	if *dbInstanceStatus == "available" {
+		if generateNewPassword {
+			instance.Password = GenerateRandomAlphanumericString()
+			_, err = f.Svc.ModifyDBInstance(&rds.ModifyDBInstanceInput{
+				DBInstanceIdentifier: aws.String(instance.InstanceName),
+				MasterUserPassword: aws.String(instance.Password),
+			})
+			if err != nil {
+				errChan <- err
+				return
 			}
-			dbAddr := dbInstances[0].Endpoint.Address
-			dbPort := dbInstances[0].Endpoint.Port
-			instance.DBURI = fmt.Sprintf("%s://%s:%s@%s:%d/%s", instance.Engine, instance.Username, instance.Password, *dbAddr, *dbPort, instance.DBName)
-			errChan <- nil
-			break
 		}
-
-		time.Sleep(1 * f.WaitDuration)
+		dbAddr := dbInstances[0].Endpoint.Address
+		dbPort := dbInstances[0].Endpoint.Port
+		instance.DBURI = fmt.Sprintf("%s://%s:%s@%s:%d/%s", instance.Engine, instance.Username, instance.Password, *dbAddr, *dbPort, instance.DBName)
+		errChan <- nil
 	}
 }
 
