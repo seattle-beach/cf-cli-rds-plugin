@@ -6,6 +6,7 @@ import (
 	"github.com/cloudfoundry/cli/cf/errors"
 	"time"
 	"github.com/seattle-beach/cf-cli-rds-plugin/api"
+	"github.com/aws/aws-sdk-go/service/rds"
 )
 
 type UpsOption struct {
@@ -17,9 +18,15 @@ type TinyUI interface {
 	DisplayText(template string, data ...map[string]interface{})
 }
 
+type Api interface {
+	GetSubnetGroups() ([]*rds.DBSubnetGroup, error)
+	CreateInstance(instance *api.DBInstance) chan error
+	RefreshInstance(instance *api.DBInstance) chan error
+}
+
 type BasicPlugin struct {
 	UI  TinyUI
-	Api *api.CfRDSApi
+	Api Api
 	WaitDuration time.Duration
 }
 

@@ -18,11 +18,6 @@ type RDSService interface {
 	WaitUntilDBInstanceAvailable(input *rds.DescribeDBInstancesInput) error
 }
 
-type Api interface {
-	GetSubnetGroups() ([]*rds.DBSubnetGroup, error)
-	CreateInstance(instance *DBInstance) chan error
-	RefreshInstance(instance *DBInstance) chan error
-}
 
 type CfRDSApi struct {
 	Svc RDSService

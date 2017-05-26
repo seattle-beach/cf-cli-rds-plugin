@@ -89,6 +89,18 @@ var _ = Describe("Api", func() {
 				})
 			})
 
+			Context("when there are no DB subnet groups", func() {
+				BeforeEach(func() {
+					fakeRDSSvc.DescribeDBSubnetGroupsReturns(&rds.DescribeDBSubnetGroupsOutput{
+						DBSubnetGroups: []*rds.DBSubnetGroup{},
+					}, nil)
+				})
+
+				It("should return an error", func() {
+					_, err := cfRDSApi.GetSubnetGroups()
+					Expect(err).To(MatchError("Error: did not find any DB subnet groups to create RDS instance in"))
+				})
+			})
 		})
 	})
 
@@ -177,6 +189,26 @@ var _ = Describe("Api", func() {
 
 			Expect(fakeRDSSvc.WaitUntilDBInstanceAvailableCallCount()).To(Equal(1))
 		})
+
+		Context("error cases", func() {
+			Context("when there are no vpc security groups", func() {
+				BeforeEach(func() {
+					fakeRDSSvc.CreateDBInstanceReturns(&rds.CreateDBInstanceOutput{
+						DBInstance: &rds.DBInstance{
+							DbiResourceId:     aws.String("resourceid"),
+							DBInstanceArn:     aws.String("resourcearn"),
+							VpcSecurityGroups: []*rds.VpcSecurityGroupMembership{},
+						},
+					}, nil)
+				})
+
+				It("should return an error", func() {
+					errChan := cfRDSApi.CreateInstance(instance)
+					err := <- errChan
+					Expect(err).To(MatchError("Error: do not have any VPC security groups to associate with RDS instance"))
+				})
+			})
+		})
 	})
 
 	Describe("RefreshInstance", func() {
@@ -264,6 +296,21 @@ var _ = Describe("Api", func() {
 					err := <-errChan
 
 					Expect(err).To(MatchError("No valid AWS credentials found. Please see this document for help configuring the AWS SDK: https://github.com/aws/aws-sdk-go#configuring-credentials"))
+				})
+			})
+
+			Context("when describe DB instances returns no instances", func() {
+				BeforeEach(func() {
+					fakeRDSSvc.DescribeDBInstancesStub = func(input *rds.DescribeDBInstancesInput) (*rds.DescribeDBInstancesOutput, error) {
+						return &rds.DescribeDBInstancesOutput{DBInstances: []*rds.DBInstance{}}, nil
+					}
+				})
+
+				It("returns an error", func() {
+					errChan := cfRDSApi.RefreshInstance(instance)
+					err := <-errChan
+
+					Expect(err).To(MatchError("Could not find db instance test-instance"))
 				})
 			})
 		})
