@@ -7,6 +7,7 @@ import (
 	"time"
 	"math/rand"
 	"fmt"
+	"strings"
 )
 
 type RDSService interface {
@@ -59,6 +60,9 @@ func (f *CfRDSApi) GetSubnetGroups() ([]*rds.DBSubnetGroup, error) {
 		MaxRecords: aws.Int64(20),
 	})
 	if err != nil {
+		if strings.Contains(err.Error(), "NoCredentialProviders") {
+			return []*rds.DBSubnetGroup{}, errors.New("No valid AWS credentials found. Please see this document for help configuring the AWS SDK: https://github.com/aws/aws-sdk-go#configuring-credentials")
+		}
 		return []*rds.DBSubnetGroup{}, err
 	}
 
@@ -128,6 +132,10 @@ func (f *CfRDSApi) RefreshInstance(instance *DBInstance) chan error {
 		DBInstanceIdentifier: aws.String(instance.InstanceName),
 	})
 	if err != nil {
+		if strings.Contains(err.Error(), "NoCredentialProviders") {
+			err = errors.New("No valid AWS credentials found. Please see this document for help configuring the AWS SDK: https://github.com/aws/aws-sdk-go#configuring-credentials")
+		}
+
 		errChan <- err
 		return errChan
 	}

@@ -7,6 +7,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/seattle-beach/cf-cli-rds-plugin/api/fakes"
 	"github.com/seattle-beach/cf-cli-rds-plugin/api"
+	"errors"
 )
 
 var _ = Describe("Api", func() {
@@ -72,6 +73,22 @@ var _ = Describe("Api", func() {
 						}},
 					VpcId: aws.String("vpcid"),
 			}}))
+		})
+
+		Context("Error cases", func() {
+			Context("when no AWS credentials are provided", func() {
+				BeforeEach(func() {
+					fakeRDSSvc.DescribeDBSubnetGroupsReturns(&rds.DescribeDBSubnetGroupsOutput{
+						DBSubnetGroups: []*rds.DBSubnetGroup{},
+					}, errors.New("NoCredentialProviders"))
+				})
+
+				It("should return helpful error", func() {
+					_, err := cfRDSApi.GetSubnetGroups()
+					Expect(err).To(MatchError("No valid AWS credentials found. Please see this document for help configuring the AWS SDK: https://github.com/aws/aws-sdk-go#configuring-credentials"))
+				})
+			})
+
 		})
 	})
 
@@ -234,6 +251,21 @@ var _ = Describe("Api", func() {
 				MasterUserPassword: aws.String("password_reset"),
 			}))
 			Expect(instance.DBURI).To(Equal("postgres://root:password_reset@test-uri.us-east-1.rds.amazonaws.com:5432/database"))
+		})
+
+		Context("error cases", func() {
+			Context("when no AWS credentials are provided", func() {
+				BeforeEach(func() {
+					fakeRDSSvc.DescribeDBInstancesReturns(&rds.DescribeDBInstancesOutput{}, errors.New("NoCredentialProviders"))
+				})
+
+				It("should return helpful error", func() {
+					errChan := cfRDSApi.RefreshInstance(instance)
+					err := <-errChan
+
+					Expect(err).To(MatchError("No valid AWS credentials found. Please see this document for help configuring the AWS SDK: https://github.com/aws/aws-sdk-go#configuring-credentials"))
+				})
+			})
 		})
 	})
 })
