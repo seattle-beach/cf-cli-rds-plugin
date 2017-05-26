@@ -6,6 +6,7 @@ import (
 	"github.com/cloudfoundry/cli/cf/errors"
 	"time"
 	"github.com/seattle-beach/cf-cli-rds-plugin/api"
+	"strings"
 )
 
 type UpsOption struct {
@@ -56,6 +57,11 @@ func (c *BasicPlugin) waitForApiResponse(instance *api.DBInstance, errChan chan 
 		select {
 		case err := <-errChan:
 			if err != nil {
+				if strings.Contains(err.Error(), "NoCredentialProviders") {
+					c.UI.DisplayError(errors.New("No valid AWS credentials found. Please see this document for help configuring the AWS SDK: https://github.com/aws/aws-sdk-go#configuring-credentials"))
+					return
+				}
+				
 				c.UI.DisplayError(err)
 				return
 			}
@@ -88,6 +94,11 @@ func (c *BasicPlugin) Run(cliConnection plugin.CliConnection, args []string) {
 			serviceName := args[1]
 			subnetGroups, err := c.Api.GetSubnetGroups()
 			if err != nil {
+				if strings.Contains(err.Error(), "NoCredentialProviders") {
+					c.UI.DisplayError(errors.New("No valid AWS credentials found. Please see this document for help configuring the AWS SDK: https://github.com/aws/aws-sdk-go#configuring-credentials"))
+					return
+				}
+
 				c.UI.DisplayError(err)
 				return
 			}

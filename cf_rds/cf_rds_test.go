@@ -12,6 +12,7 @@ import (
 	"github.com/seattle-beach/cf-cli-rds-plugin/api"
 	"time"
 	"code.cloudfoundry.org/cli/plugin"
+	"code.cloudfoundry.org/cli/cf/errors"
 )
 
 var _ = Describe("CfRds", func() {
@@ -224,6 +225,19 @@ var _ = Describe("CfRds", func() {
 				})
 
 				Context("error cases", func() {
+					Context("when no AWS credentials are provided", func() {
+						BeforeEach(func() {
+							fakeRDSSvc.DescribeDBSubnetGroupsReturns(&rds.DescribeDBSubnetGroupsOutput{
+								DBSubnetGroups: []*rds.DBSubnetGroup{},
+							}, errors.New("NoCredentialProviders"))
+						})
+
+						It("should return helpful error", func() {
+							p.Run(conn, args)
+							Expect(ui.Err).To(MatchError("No valid AWS credentials found. Please see this document for help configuring the AWS SDK: https://github.com/aws/aws-sdk-go#configuring-credentials"))
+						})
+					})
+
 					Context("when there are no DB subnet groups", func() {
 						BeforeEach(func() {
 							fakeRDSSvc.DescribeDBSubnetGroupsReturns(&rds.DescribeDBSubnetGroupsOutput{
@@ -348,6 +362,17 @@ var _ = Describe("CfRds", func() {
 				})
 
 				Context("error cases", func() {
+					Context("when no AWS credentials are provided", func() {
+						BeforeEach(func() {
+							fakeRDSSvc.DescribeDBInstancesReturns(&rds.DescribeDBInstancesOutput{}, errors.New("NoCredentialProviders"))
+						})
+
+						It("should return helpful error", func() {
+							p.Run(conn, args)
+							Expect(ui.Err).To(MatchError("No valid AWS credentials found. Please see this document for help configuring the AWS SDK: https://github.com/aws/aws-sdk-go#configuring-credentials"))
+						})
+					})
+
 					Context("when describe DB instances returns no instances", func() {
 						BeforeEach(func() {
 							fakeRDSSvc.DescribeDBInstancesStub = func(input *rds.DescribeDBInstancesInput) (*rds.DescribeDBInstancesOutput, error) {
@@ -425,8 +450,8 @@ var _ = Describe("CfRds", func() {
 // test case for error from cli command
 type MockUi struct {
 	TextTemplate string
-	Err error
-	Data map[string]interface{}
+	Err          error
+	Data         map[string]interface{}
 }
 
 func (u *MockUi) DisplayText(template string, data ...map[string]interface{}) {
