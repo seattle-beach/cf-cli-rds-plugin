@@ -4,9 +4,9 @@ Cloud Foundry Plugin to provision a Relational Database Service (RDS) instance
 and connect it to a Pivotal Web Services (PWS) App.
 
 It exposes three commands:
-1. `cf aws-rds-create`
-1. `cf aws-rds-register`
-1. `cf aws-rds-refresh`
+1. `cf aws-rds-create SERVICE_NAME` - create an RDS instance and register it as a service with CF
+1. `cf aws-rds-register SERVICE_NAME --uri URI` - register existing RDS instance as a service with CF
+1. `cf aws-rds-refresh SERVICE_NAME` - update an existing RDS instance and register it as a service with CF (used in case the user quits aws-rds-create command before the instance is fully available)
 
 ## Getting Started
 
