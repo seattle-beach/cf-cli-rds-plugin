@@ -10,10 +10,18 @@ It exposes three commands:
 
 ## Getting Started
 
-1. Make sure `$GOPATH` is set. If it isn't already set, `$HOME/go` is probably a reasonable value to use.
-2. `go get github.com/seattle-beach/cf-cli-rds-plugin`
-3. `cf install-plugin $GOPATH/bin/cf-cli-rds-plugin`
-4. `cf aws-rds-create` or `cf aws-rds-register`
+### Building from source
+1. Make sure `$GOPATH` is set. If it isn't already set, `$HOME/go` is probably a reasonable value to use. Make sure `$GOPATH/bin` is added to your system PATH.
+1. `go get github.com/seattle-beach/cf-cli-rds-plugin`
+1. `mv $GOPATH/bin/cf-cli-rds-plugin $GOPATH/bin/aws-plugin`
+1. `cf install-plugin $GOPATH/bin/aws-plugin`
+1. `cf aws-rds-create`/`cf aws-rds-register`
+
+### Downloading plugin binary directly
+1. Navigate to the github releases page of this repository.
+1. Download the `aws-plugin` binary.
+1. `cf install-plugin <path/to/aws-plugin>`
+1. `cf aws-rds-create`/`cf aws-rds-register`
 
 For usage of the plugin, you can run:
 
@@ -24,4 +32,7 @@ Install ginkgo on your machine. For instructions go to: `https://github.com/onsi
 
 If the `ginkgo` command did not get installed, try `go get github.com/onsi/ginkgo/ginkgo`
 
-Run `ginkgo` from the plugin path (`$GOPATH/src/github.com/seattle-beach/cf-cli-rds-plugin/`)
+Run `ginkgo -r .` from the plugin path (`$GOPATH/src/github.com/seattle-beach/cf-cli-rds-plugin/`)
+
+## Uninstalling
+`cf uninstall-plugin aws-plugin`
