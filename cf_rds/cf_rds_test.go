@@ -11,197 +11,199 @@ import (
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/seattle-beach/cf-cli-rds-plugin/api"
 	"time"
+	"code.cloudfoundry.org/cli/plugin"
 )
 
 var _ = Describe("CfRds", func() {
 	Describe("BasicPlugin", func() {
-		Context("register", func() {
-			var ui MockUi
-			var conn *pluginfakes.FakeCliConnection
-			var p *BasicPlugin
-			var args []string
+		Describe("Run", func() {
+			Context("register", func() {
+				var ui MockUi
+				var conn *pluginfakes.FakeCliConnection
+				var p *BasicPlugin
+				var args []string
 
-			BeforeEach(func() {
-				conn = &pluginfakes.FakeCliConnection{}
-				ui = MockUi{}
-
-				p = &BasicPlugin{
-					UI: &ui,
-				}
-				args = []string{"aws-rds", "register", "name", "--uri", "postgres://user:pwd@example.com:5432/database"}
-			})
-
-			It("creates a user-provided service with user-provided RDS instance", func() {
-				p.Run(conn, args)
-				Expect(conn.CliCommandCallCount()).To(Equal(1))
-				Expect(conn.CliCommandArgsForCall(0)).To(Equal([]string{"cups", "name", "-p", "{\"uri\":\"postgres://user:pwd@example.com:5432/database\"}"}))
-			})
-
-			Context("success message", func() {
 				BeforeEach(func() {
-					conn.GetCurrentSpaceReturns(plugin_models.Space{
-						plugin_models.SpaceFields{
-							Guid: "fake-guid",
-							Name: "fake-space",
-						},
-					}, nil)
+					conn = &pluginfakes.FakeCliConnection{}
+					ui = MockUi{}
+
+					p = &BasicPlugin{
+						UI: &ui,
+					}
+					args = []string{"aws-rds-register", "name", "--uri", "postgres://user:pwd@example.com:5432/database"}
 				})
 
-				It("displays success message", func() {
+				It("creates a user-provided service with user-provided RDS instance", func() {
 					p.Run(conn, args)
-					Expect(ui.TextTemplate).To(Equal("Successfully created user-provided service {{.ServiceName}} in space {{.Space}}! You can bind this service to an app using `cf bind-service` or add it to the `services` section in your manifest.yml"))
-					Expect(ui.Data).To(Equal(map[string]interface{}{
-						"ServiceName":  "name",
-						"Space": "fake-space",
+					Expect(conn.CliCommandCallCount()).To(Equal(1))
+					Expect(conn.CliCommandArgsForCall(0)).To(Equal([]string{"cups", "name", "-p", "{\"uri\":\"postgres://user:pwd@example.com:5432/database\"}"}))
+				})
+
+				Context("success message", func() {
+					BeforeEach(func() {
+						conn.GetCurrentSpaceReturns(plugin_models.Space{
+							plugin_models.SpaceFields{
+								Guid: "fake-guid",
+								Name: "fake-space",
+							},
+						}, nil)
+					})
+
+					It("displays success message", func() {
+						p.Run(conn, args)
+						Expect(ui.TextTemplate).To(Equal("Successfully created user-provided service {{.ServiceName}} in space {{.Space}}! You can bind this service to an app using `cf bind-service` or add it to the `services` section in your manifest.yml"))
+						Expect(ui.Data).To(Equal(map[string]interface{}{
+							"ServiceName": "name",
+							"Space":       "fake-space",
+						}))
+					})
+				})
+
+				Context("error cases", func() {
+					It("returns an error if there are not enough arguments", func() {
+						args = []string{"aws-rds-register", "name"}
+						p.Run(conn, args)
+
+						Expect(ui.Err).To(MatchError(ContainSubstring("cf aws-rds-register SERVICE_NAME --uri URI")))
+					})
+
+					It("returns an error if the --uri option flag is not provided", func() {
+						args = []string{"aws-rds-register", "name", "--foo", "postgres://foo"}
+						p.Run(conn, args)
+
+						Expect(ui.Err).To(MatchError(ContainSubstring("cf aws-rds-register SERVICE_NAME --uri URI")))
+					})
+				})
+			})
+
+			Context("create", func() {
+				var ui MockUi
+				var conn *pluginfakes.FakeCliConnection
+				var cfrdsapi *api.CfRDSApi
+				var fakeRDSSvc *fakes.FakeRDSService
+				var p *BasicPlugin
+				var args []string
+
+				BeforeEach(func() {
+					conn = &pluginfakes.FakeCliConnection{}
+					ui = MockUi{}
+					fakeRDSSvc = &fakes.FakeRDSService{}
+
+					cfrdsapi = &api.CfRDSApi{
+						Svc: fakeRDSSvc,
+					}
+
+					p = &BasicPlugin{
+						UI:           &ui,
+						Api:          cfrdsapi,
+						WaitDuration: time.Millisecond,
+					}
+					args = []string{"aws-rds-create", "name"}
+
+					fakeRDSSvc.DescribeDBSubnetGroupsReturns(&rds.DescribeDBSubnetGroupsOutput{
+						DBSubnetGroups: []*rds.DBSubnetGroup{{
+							DBSubnetGroupArn:         aws.String("arn:aws:rds:us-east-1:787194449165:subgrp:default-vpc-f7f7098e"),
+							DBSubnetGroupDescription: aws.String("Created from the RDS Management Console"),
+							DBSubnetGroupName:        aws.String("default-vpc-vpcid"),
+							SubnetGroupStatus:        aws.String("Complete"),
+							Subnets: []*rds.Subnet{
+								{
+									SubnetAvailabilityZone: &rds.AvailabilityZone{
+										Name: aws.String("us-east-1d"),
+									},
+									SubnetIdentifier: aws.String("subnet-dc92a7b9"),
+									SubnetStatus:     aws.String("Active"),
+								}},
+							VpcId: aws.String("vpcid"),
+						}},
+					}, nil)
+
+					fakeRDSSvc.CreateDBInstanceReturns(&rds.CreateDBInstanceOutput{
+						DBInstance: &rds.DBInstance{
+							DbiResourceId: aws.String("resourceid"),
+							DBInstanceArn: aws.String("arn:aws:rds:us-east-1:10101010:db:name"),
+							VpcSecurityGroups: []*rds.VpcSecurityGroupMembership{{
+								VpcSecurityGroupId: aws.String("vpcgroup"),
+							}},
+						},
+
+					}, nil)
+
+					fakeRDSSvc.DescribeDBInstancesStub = func(input *rds.DescribeDBInstancesInput) (*rds.DescribeDBInstancesOutput, error) {
+						return &rds.DescribeDBInstancesOutput{
+							DBInstances: []*rds.DBInstance{{
+								DBInstanceIdentifier: aws.String("resourceid"),
+								DBInstanceStatus:     aws.String("available"),
+								Endpoint: &rds.Endpoint{
+									Port:    aws.Int64(5432),
+									Address: aws.String("test-uri.us-east-1.rds.amazonaws.com"),
+								},
+							}},
+						}, nil
+					}
+
+					api.GenerateRandomAlphanumericString = func() string {
+						return "password"
+					}
+
+					api.GenerateRandomString = func() string {
+						return "database"
+					}
+				})
+
+				It("lists the DB subnet groups in the user's account", func() {
+					p.Run(conn, args)
+					Expect(fakeRDSSvc.DescribeDBSubnetGroupsCallCount()).To(Equal(1))
+					Expect(fakeRDSSvc.DescribeDBSubnetGroupsArgsForCall(0)).To(Equal(&rds.DescribeDBSubnetGroupsInput{
+						Filters: []*rds.Filter{
+							{
+								Name: aws.String("*"),
+								Values: []*string{
+									aws.String("*"),
+								},
+							},
+						},
+						Marker:     aws.String("String"),
+						MaxRecords: aws.Int64(20),
 					}))
 				})
-			})
 
-			Context("error cases", func() {
-				It("returns an error if there are not enough arguments", func() {
-					args = []string{"aws-rds", "register", "name"}
+				It("creates an RDS DB instance in the first subnet group", func() {
 					p.Run(conn, args)
+					Expect(fakeRDSSvc.CreateDBInstanceCallCount()).To(Equal(1))
 
-					Expect(ui.Err).To(MatchError(ContainSubstring("cf aws-rds register SERVICE_NAME --uri URI")))
+					createDBInstanceInput := fakeRDSSvc.CreateDBInstanceArgsForCall(0)
+					Expect(createDBInstanceInput.DBInstanceClass).To(Equal(aws.String("db.t2.micro")))
+					Expect(createDBInstanceInput.DBInstanceIdentifier).To(Equal(aws.String("name")))
+					Expect(createDBInstanceInput.Engine).To(Equal(aws.String("postgres")))
+					Expect(createDBInstanceInput.DBParameterGroupName).To(Equal(aws.String("default.postgres9.6")))
+					Expect(createDBInstanceInput.AllocatedStorage).To(Equal(aws.Int64(20)))
+					Expect(createDBInstanceInput.AvailabilityZone).To(Equal(aws.String("us-east-1a")))
+					Expect(createDBInstanceInput.DBSubnetGroupName).To(Equal(aws.String("default-vpc-vpcid")))
+					Expect(createDBInstanceInput.Port).To(Equal(aws.Int64(5432)))
 				})
 
-				It("returns an error if the --uri option flag is not provided", func() {
-					args = []string{"aws-rds", "register", "name", "--foo", "postgres://foo"}
+				It("creates a user-provided service with the created RDS instance", func() {
 					p.Run(conn, args)
+					Expect(conn.CliCommandCallCount()).To(Equal(2))
 
-					Expect(ui.Err).To(MatchError(ContainSubstring("cf aws-rds register SERVICE_NAME --uri URI")))
-				})
-			})
-		})
-
-		Context("create", func() {
-			var ui MockUi
-			var conn *pluginfakes.FakeCliConnection
-			var cfrdsapi *api.CfRDSApi
-			var fakeRDSSvc *fakes.FakeRDSService
-			var p *BasicPlugin
-			var args []string
-
-			BeforeEach(func() {
-				conn = &pluginfakes.FakeCliConnection{}
-				ui = MockUi{}
-				fakeRDSSvc = &fakes.FakeRDSService{}
-
-				cfrdsapi = &api.CfRDSApi {
-					Svc: fakeRDSSvc,
-				}
-
-				p = &BasicPlugin{
-					UI: &ui,
-					Api: cfrdsapi,
-					WaitDuration: time.Millisecond,
-				}
-				args = []string{"aws-rds", "create", "name"}
-
-				fakeRDSSvc.DescribeDBSubnetGroupsReturns(&rds.DescribeDBSubnetGroupsOutput{
-					DBSubnetGroups: []*rds.DBSubnetGroup{{
-						DBSubnetGroupArn: aws.String("arn:aws:rds:us-east-1:787194449165:subgrp:default-vpc-f7f7098e"),
-						DBSubnetGroupDescription: aws.String("Created from the RDS Management Console"),
-						DBSubnetGroupName: aws.String("default-vpc-vpcid"),
-						SubnetGroupStatus: aws.String("Complete"),
-						Subnets: []*rds.Subnet{
-						{
-							SubnetAvailabilityZone: &rds.AvailabilityZone {
-								Name: aws.String("us-east-1d"),
-							},
-							SubnetIdentifier: aws.String("subnet-dc92a7b9"),
-							SubnetStatus: aws.String("Active"),
-						}},
-						VpcId: aws.String("vpcid"),
-					}},
-				}, nil)
-
-				fakeRDSSvc.CreateDBInstanceReturns(&rds.CreateDBInstanceOutput{
-					DBInstance: &rds.DBInstance{
-						DbiResourceId: aws.String("resourceid"),
-						DBInstanceArn: aws.String("arn:aws:rds:us-east-1:10101010:db:name"),
-						VpcSecurityGroups: []*rds.VpcSecurityGroupMembership{{
-							VpcSecurityGroupId: aws.String("vpcgroup"),
-						}},
-					},
-
-				}, nil)
-
-				fakeRDSSvc.DescribeDBInstancesStub = func(input *rds.DescribeDBInstancesInput) (*rds.DescribeDBInstancesOutput, error) {
-					return &rds.DescribeDBInstancesOutput{
-						DBInstances: []*rds.DBInstance{{
-							DBInstanceIdentifier: aws.String("resourceid"),
-							DBInstanceStatus: aws.String("available"),
-							Endpoint: &rds.Endpoint {
-								Port: aws.Int64(5432),
-								Address: aws.String("test-uri.us-east-1.rds.amazonaws.com"),
-							},
-						}},
-					}, nil
-				}
-
-				api.GenerateRandomAlphanumericString = func() string {
-					return "password"
-				}
-
-				api.GenerateRandomString = func() string {
-					return "database"
-				}
-			})
-
-			It("lists the DB subnet groups in the user's account", func() {
-				p.Run(conn, args)
-				Expect(fakeRDSSvc.DescribeDBSubnetGroupsCallCount()).To(Equal(1))
-				Expect(fakeRDSSvc.DescribeDBSubnetGroupsArgsForCall(0)).To(Equal(&rds.DescribeDBSubnetGroupsInput{
-					Filters: []*rds.Filter{
-						{
-							Name: aws.String("*"),
-							Values: []*string{
-								aws.String("*"),
-							},
-						},
-					},
-					Marker:     aws.String("String"),
-					MaxRecords: aws.Int64(20),
-				}))
-			})
-
-			It("creates an RDS DB instance in the first subnet group", func() {
-				p.Run(conn, args)
-				Expect(fakeRDSSvc.CreateDBInstanceCallCount()).To(Equal(1))
-
-				createDBInstanceInput := fakeRDSSvc.CreateDBInstanceArgsForCall(0)
-				Expect(createDBInstanceInput.DBInstanceClass).To(Equal(aws.String("db.t2.micro")))
-				Expect(createDBInstanceInput.DBInstanceIdentifier).To(Equal(aws.String("name")))
-				Expect(createDBInstanceInput.Engine).To(Equal(aws.String("postgres")))
-				Expect(createDBInstanceInput.DBParameterGroupName).To(Equal(aws.String("default.postgres9.6")))
-				Expect(createDBInstanceInput.AllocatedStorage).To(Equal(aws.Int64(20)))
-				Expect(createDBInstanceInput.AvailabilityZone).To(Equal(aws.String("us-east-1a")))
-				Expect(createDBInstanceInput.DBSubnetGroupName).To(Equal(aws.String("default-vpc-vpcid")))
-				Expect(createDBInstanceInput.Port).To(Equal(aws.Int64(5432)))
-			})
-
-			It("creates a user-provided service with the created RDS instance", func() {
-				p.Run(conn, args)
-				Expect(conn.CliCommandCallCount()).To(Equal(2))
-
-				cupsArgs := conn.CliCommandArgsForCall(0)
-				Expect(len(cupsArgs)).To(Equal(4))
-				Expect(cupsArgs[0:3]).To(Equal([]string{"cups", "name", "-p"}))
-				Expect(cupsArgs[3]).To(MatchJSON(`{
+					cupsArgs := conn.CliCommandArgsForCall(0)
+					Expect(len(cupsArgs)).To(Equal(4))
+					Expect(cupsArgs[0:3]).To(Equal([]string{"cups", "name", "-p"}))
+					Expect(cupsArgs[3]).To(MatchJSON(`{
 					"instance_id": "name",
 					"username": "root"
 				}`))
-			})
+				})
 
-			It("captures the uri and calls uups", func() {
-				p.Run(conn, args)
-				Expect(conn.CliCommandCallCount()).To(Equal(2))
+				It("captures the uri and calls uups", func() {
+					p.Run(conn, args)
+					Expect(conn.CliCommandCallCount()).To(Equal(2))
 
-				uupsArgs := conn.CliCommandArgsForCall(1)
-				Expect(len(uupsArgs)).To(Equal(4))
-				Expect(uupsArgs[0:3]).To(Equal([]string{"uups", "name", "-p"}))
-				Expect(uupsArgs[3]).To(MatchJSON(`{
+					uupsArgs := conn.CliCommandArgsForCall(1)
+					Expect(len(uupsArgs)).To(Equal(4))
+					Expect(uupsArgs[0:3]).To(Equal([]string{"uups", "name", "-p"}))
+					Expect(uupsArgs[3]).To(MatchJSON(`{
 					"instance_id": "name",
 					"arn": "arn:aws:rds:us-east-1:10101010:db:name",
 					"resource_id": "resourceid",
@@ -210,122 +212,122 @@ var _ = Describe("CfRds", func() {
 					"password": "password",
 					"database": "database"
 				}`))
-			})
-
-			It("prints a success message", func() {
-				p.Run(conn, args)
-				Expect(ui.TextTemplate).To(Equal("Successfully created user-provided service {{.ServiceName}} exposing RDS Instance {{.Name}}, {{.RDSID}} in AWS VPC {{.VPC}} with Security Group {{.SecGroup}}! You can bind this service to an app using `cf bind-service` or add it to the `services` section in your manifest.yml"))
-				Expect(ui.Data["ServiceName"]).To(Equal("name"))
-				Expect(ui.Data["RDSID"]).To(Equal("resourceid"))
-				Expect(ui.Data["VPC"]).To(Equal("vpcid"))
-				Expect(ui.Data["SecGroup"]).To(Equal("vpcgroup"))
-			})
-
-			Context("error cases", func() {
-				Context("when there are no DB subnet groups", func() {
-					BeforeEach(func() {
-						fakeRDSSvc.DescribeDBSubnetGroupsReturns(&rds.DescribeDBSubnetGroupsOutput{
-							DBSubnetGroups: []*rds.DBSubnetGroup{},
-						}, nil)
-					})
-
-					It("should return an error", func() {
-						p.Run(conn, args)
-						Expect(ui.Err).To(MatchError("Error: did not find any DB subnet groups to create RDS instance in"))
-					})
 				})
 
-				Context("when there are no vpc security groups", func() {
-					BeforeEach(func() {
-						fakeRDSSvc.CreateDBInstanceReturns(&rds.CreateDBInstanceOutput{
-							DBInstance: &rds.DBInstance{
-								DbiResourceId: aws.String("resourceid"),
-								DBInstanceArn: aws.String("resourcearn"),
-								VpcSecurityGroups: []*rds.VpcSecurityGroupMembership{},
-							},
-						}, nil)
+				It("prints a success message", func() {
+					p.Run(conn, args)
+					Expect(ui.TextTemplate).To(Equal("Successfully created user-provided service {{.ServiceName}} exposing RDS Instance {{.Name}}, {{.RDSID}} in AWS VPC {{.VPC}} with Security Group {{.SecGroup}}! You can bind this service to an app using `cf bind-service` or add it to the `services` section in your manifest.yml"))
+					Expect(ui.Data["ServiceName"]).To(Equal("name"))
+					Expect(ui.Data["RDSID"]).To(Equal("resourceid"))
+					Expect(ui.Data["VPC"]).To(Equal("vpcid"))
+					Expect(ui.Data["SecGroup"]).To(Equal("vpcgroup"))
+				})
+
+				Context("error cases", func() {
+					Context("when there are no DB subnet groups", func() {
+						BeforeEach(func() {
+							fakeRDSSvc.DescribeDBSubnetGroupsReturns(&rds.DescribeDBSubnetGroupsOutput{
+								DBSubnetGroups: []*rds.DBSubnetGroup{},
+							}, nil)
+						})
+
+						It("should return an error", func() {
+							p.Run(conn, args)
+							Expect(ui.Err).To(MatchError("Error: did not find any DB subnet groups to create RDS instance in"))
+						})
 					})
 
-					It("should return an error", func() {
-						p.Run(conn, args)
-						Expect(ui.Err).To(MatchError("Error: do not have any VPC security groups to associate with RDS instance"))
+					Context("when there are no vpc security groups", func() {
+						BeforeEach(func() {
+							fakeRDSSvc.CreateDBInstanceReturns(&rds.CreateDBInstanceOutput{
+								DBInstance: &rds.DBInstance{
+									DbiResourceId:     aws.String("resourceid"),
+									DBInstanceArn:     aws.String("resourcearn"),
+									VpcSecurityGroups: []*rds.VpcSecurityGroupMembership{},
+								},
+							}, nil)
+						})
+
+						It("should return an error", func() {
+							p.Run(conn, args)
+							Expect(ui.Err).To(MatchError("Error: do not have any VPC security groups to associate with RDS instance"))
+						})
 					})
 				})
 			})
-		})
 
-		Context("refresh", func() {
-			var ui MockUi
-			var conn *pluginfakes.FakeCliConnection
-			var cfrdsapi *api.CfRDSApi
-			var fakeRDSSvc *fakes.FakeRDSService
-			var p *BasicPlugin
-			var args []string
+			Context("refresh", func() {
+				var ui MockUi
+				var conn *pluginfakes.FakeCliConnection
+				var cfrdsapi *api.CfRDSApi
+				var fakeRDSSvc *fakes.FakeRDSService
+				var p *BasicPlugin
+				var args []string
 
-			BeforeEach(func() {
-				conn = &pluginfakes.FakeCliConnection{}
-				ui = MockUi{}
-				fakeRDSSvc = &fakes.FakeRDSService{}
+				BeforeEach(func() {
+					conn = &pluginfakes.FakeCliConnection{}
+					ui = MockUi{}
+					fakeRDSSvc = &fakes.FakeRDSService{}
 
-				cfrdsapi = &api.CfRDSApi {
-					Svc: fakeRDSSvc,
-				}
+					cfrdsapi = &api.CfRDSApi{
+						Svc: fakeRDSSvc,
+					}
 
-				p = &BasicPlugin{
-					UI: &ui,
-					Api: cfrdsapi,
-					WaitDuration: time.Millisecond,
-				}
-				args = []string{"aws-rds", "refresh", "name"}
+					p = &BasicPlugin{
+						UI:           &ui,
+						Api:          cfrdsapi,
+						WaitDuration: time.Millisecond,
+					}
+					args = []string{"aws-rds-refresh", "name"}
 
-				fakeRDSSvc.DescribeDBInstancesStub = func(input *rds.DescribeDBInstancesInput) (*rds.DescribeDBInstancesOutput, error) {
-					return &rds.DescribeDBInstancesOutput{
-						DBInstances: []*rds.DBInstance{{
-							DBInstanceIdentifier: aws.String("name"),
-							DBInstanceStatus: aws.String("available"),
-							Endpoint: &rds.Endpoint {
-								Port: aws.Int64(5432),
-								Address: aws.String("test-uri.us-east-1.rds.amazonaws.com"),
-							},
-							DBInstanceArn: aws.String("arn:aws:rds:us-east-1:10101010:db:name"),
-							DbiResourceId: aws.String("resourceid"),
-							MasterUsername: aws.String("root"),
-							DBName: aws.String("database"),
-							VpcSecurityGroups: []*rds.VpcSecurityGroupMembership {{
-								VpcSecurityGroupId: aws.String("vpcgroup"),
+					fakeRDSSvc.DescribeDBInstancesStub = func(input *rds.DescribeDBInstancesInput) (*rds.DescribeDBInstancesOutput, error) {
+						return &rds.DescribeDBInstancesOutput{
+							DBInstances: []*rds.DBInstance{{
+								DBInstanceIdentifier: aws.String("name"),
+								DBInstanceStatus:     aws.String("available"),
+								Endpoint: &rds.Endpoint{
+									Port:    aws.Int64(5432),
+									Address: aws.String("test-uri.us-east-1.rds.amazonaws.com"),
+								},
+								DBInstanceArn:  aws.String("arn:aws:rds:us-east-1:10101010:db:name"),
+								DbiResourceId:  aws.String("resourceid"),
+								MasterUsername: aws.String("root"),
+								DBName:         aws.String("database"),
+								VpcSecurityGroups: []*rds.VpcSecurityGroupMembership{{
+									VpcSecurityGroupId: aws.String("vpcgroup"),
+								}},
+								DBSubnetGroup: &rds.DBSubnetGroup{
+									DBSubnetGroupName: aws.String("default-vpc-vpcid"),
+									VpcId:             aws.String("vpcid"),
+								},
+								Engine: aws.String("postgres"),
 							}},
-							DBSubnetGroup: &rds.DBSubnetGroup{
-								DBSubnetGroupName: aws.String("default-vpc-vpcid"),
-								VpcId: aws.String("vpcid"),
-							},
-							Engine: aws.String("postgres"),
-						}},
-					}, nil
-				}
+						}, nil
+					}
 
-				fakeRDSSvc.ModifyDBInstanceReturns(&rds.ModifyDBInstanceOutput{}, nil)
+					fakeRDSSvc.ModifyDBInstanceReturns(&rds.ModifyDBInstanceOutput{}, nil)
 
-				api.GenerateRandomAlphanumericString = func() string {
-					return "password2"
-				}
-			})
+					api.GenerateRandomAlphanumericString = func() string {
+						return "password2"
+					}
+				})
 
-			It("recaptures DB info from AWS and resets the password", func() {
-				p.Run(conn, args)
-				Expect(fakeRDSSvc.ModifyDBInstanceCallCount()).To(Equal(1))
-				Expect(fakeRDSSvc.ModifyDBInstanceArgsForCall(0)).To(Equal(&rds.ModifyDBInstanceInput{
-					DBInstanceIdentifier: aws.String("name"),
-					MasterUserPassword: aws.String("password2"),
-				}))
-			})
+				It("recaptures DB info from AWS and resets the password", func() {
+					p.Run(conn, args)
+					Expect(fakeRDSSvc.ModifyDBInstanceCallCount()).To(Equal(1))
+					Expect(fakeRDSSvc.ModifyDBInstanceArgsForCall(0)).To(Equal(&rds.ModifyDBInstanceInput{
+						DBInstanceIdentifier: aws.String("name"),
+						MasterUserPassword:   aws.String("password2"),
+					}))
+				})
 
-			It("captures the uri and calls uups", func() {
-				p.Run(conn, args)
-				Expect(conn.CliCommandCallCount()).To(Equal(1))
+				It("captures the uri and calls uups", func() {
+					p.Run(conn, args)
+					Expect(conn.CliCommandCallCount()).To(Equal(1))
 
-				uupsArgs := conn.CliCommandArgsForCall(0)
-				Expect(uupsArgs[0:3]).To(Equal([]string{"uups", "name", "-p"}))
-				Expect(uupsArgs[3]).To(MatchJSON(`{
+					uupsArgs := conn.CliCommandArgsForCall(0)
+					Expect(uupsArgs[0:3]).To(Equal([]string{"uups", "name", "-p"}))
+					Expect(uupsArgs[3]).To(MatchJSON(`{
 					"instance_id": "name",
 					"arn": "arn:aws:rds:us-east-1:10101010:db:name",
 					"resource_id": "resourceid",
@@ -334,30 +336,87 @@ var _ = Describe("CfRds", func() {
 					"password": "password2",
 					"database": "database"
 				}`))
-			})
+				})
 
-			It("prints a success message", func() {
-				p.Run(conn, args)
-				Expect(ui.TextTemplate).To(Equal("Successfully created user-provided service {{.ServiceName}} exposing RDS Instance {{.Name}}, {{.RDSID}} in AWS VPC {{.VPC}} with Security Group {{.SecGroup}}! You can bind this service to an app using `cf bind-service` or add it to the `services` section in your manifest.yml"))
-				Expect(ui.Data["ServiceName"]).To(Equal("name"))
-				Expect(ui.Data["RDSID"]).To(Equal("resourceid"))
-				Expect(ui.Data["VPC"]).To(Equal("vpcid"))
-				Expect(ui.Data["SecGroup"]).To(Equal("vpcgroup"))
-			})
+				It("prints a success message", func() {
+					p.Run(conn, args)
+					Expect(ui.TextTemplate).To(Equal("Successfully created user-provided service {{.ServiceName}} exposing RDS Instance {{.Name}}, {{.RDSID}} in AWS VPC {{.VPC}} with Security Group {{.SecGroup}}! You can bind this service to an app using `cf bind-service` or add it to the `services` section in your manifest.yml"))
+					Expect(ui.Data["ServiceName"]).To(Equal("name"))
+					Expect(ui.Data["RDSID"]).To(Equal("resourceid"))
+					Expect(ui.Data["VPC"]).To(Equal("vpcid"))
+					Expect(ui.Data["SecGroup"]).To(Equal("vpcgroup"))
+				})
 
-			Context("error cases", func() {
-				Context("when describe DB instances returns no instances", func() {
-					BeforeEach(func() {
-						fakeRDSSvc.DescribeDBInstancesStub = func(input *rds.DescribeDBInstancesInput) (*rds.DescribeDBInstancesOutput, error) {
-							return &rds.DescribeDBInstancesOutput{DBInstances: []*rds.DBInstance{}}, nil
-						}
-					})
+				Context("error cases", func() {
+					Context("when describe DB instances returns no instances", func() {
+						BeforeEach(func() {
+							fakeRDSSvc.DescribeDBInstancesStub = func(input *rds.DescribeDBInstancesInput) (*rds.DescribeDBInstancesOutput, error) {
+								return &rds.DescribeDBInstancesOutput{DBInstances: []*rds.DBInstance{}}, nil
+							}
+						})
 
-					It("returns an error", func() {
-						p.Run(conn, args)
-						Expect(ui.Err).To(MatchError("Could not find db instance name"))
+						It("returns an error", func() {
+							p.Run(conn, args)
+							Expect(ui.Err).To(MatchError("Could not find db instance name"))
+						})
 					})
 				})
+			})
+		})
+
+		Describe("GetMetadata", func() {
+			var ui MockUi
+			var p *BasicPlugin
+
+			BeforeEach(func() {
+				ui = MockUi{}
+
+				p = &BasicPlugin{
+					UI: &ui,
+				}
+			})
+
+			It("returns metadata for the plugin", func() {
+				Expect(p.GetMetadata()).To(Equal(plugin.PluginMetadata{
+					Name: "aws-plugin",
+					Version: plugin.VersionType{
+						Major: 1,
+						Minor: 0,
+						Build: 0,
+					},
+					MinCliVersion: plugin.VersionType{
+						Major: 6,
+						Minor: 7,
+						Build: 0,
+					},
+					Commands: []plugin.Command{
+						{
+							Name:     "aws-rds-register",
+							HelpText: "command to register existing RDS instance as a service with CF",
+
+							UsageDetails: plugin.Usage{
+								Usage: "cf aws-rds-register SERVICE_NAME --uri URI",
+							},
+						},
+						{
+							Name:     "aws-rds-create",
+							HelpText: "command to create an RDS instance and register it as a service with CF",
+
+							UsageDetails: plugin.Usage{
+								Usage: "cf aws-rds-create SERVICE_NAME",
+							},
+						},
+						{
+							Name:     "aws-rds-refresh",
+							HelpText: "command to update an existing RDS instance and register it as a service with CF (used in case the user quits rds-create command before the instance is fully available)",
+
+							UsageDetails: plugin.Usage{
+								Usage: "cf aws-rds-refresh SERVICE_NAME",
+							},
+						},
+					},
+				}))
+
 			})
 		})
 	})

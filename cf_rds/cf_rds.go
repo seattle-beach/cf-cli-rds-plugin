@@ -4,7 +4,6 @@ import (
 	"code.cloudfoundry.org/cli/plugin"
 	"encoding/json"
 	"github.com/cloudfoundry/cli/cf/errors"
-	"fmt"
 	"time"
 	"github.com/seattle-beach/cf-cli-rds-plugin/api"
 )
@@ -85,9 +84,8 @@ func (c *BasicPlugin) waitForApiResponse(instance *api.DBInstance, errChan chan 
 }
 
 func (c *BasicPlugin) Run(cliConnection plugin.CliConnection, args []string) {
-	if args[0] == "aws-rds" {
-		if len(args) > 2 && args[1] == "create" {
-			serviceName := args[2]
+		if args[0] == "aws-rds-create" && len(args) > 1 {
+			serviceName := args[1]
 			subnetGroups, err := c.Api.GetSubnetGroups()
 			if err != nil {
 				c.UI.DisplayError(err)
@@ -116,8 +114,8 @@ func (c *BasicPlugin) Run(cliConnection plugin.CliConnection, args []string) {
 			return
 		}
 
-		if len(args) > 2 && args[1] == "refresh" {
-			serviceName := args[2]
+		if args[0] == "aws-rds-refresh" && len(args) > 1 {
+			serviceName := args[1]
 			dbInstance := &api.DBInstance{
 				InstanceName: serviceName,
 			}
@@ -127,10 +125,10 @@ func (c *BasicPlugin) Run(cliConnection plugin.CliConnection, args []string) {
 			return
 		}
 
-		if len(args) == 5 && args[1] == "register" && args[3] == "--uri" {
-			serviceName := args[2]
+		if args[0] == "aws-rds-register" && len(args) == 4 && args[2] == "--uri" {
+			serviceName := args[1]
 			uri, _ := json.Marshal(&UpsOption{
-				Uri: args[4],
+				Uri: args[3],
 			})
 			_, err := cliConnection.CliCommand("cups", serviceName, "-p", string(uri))
 			if err != nil {
@@ -153,12 +151,14 @@ func (c *BasicPlugin) Run(cliConnection plugin.CliConnection, args []string) {
 			return
 		}
 
-		c.UI.DisplayError(errors.New(fmt.Sprintf("Usage:\n%s\n%s\n%s",
-			"cf aws-rds register SERVICE_NAME --uri URI",
-			"cf aws-rds create SERVICE_NAME",
-			"cf aws-rds refresh SERVICE_NAME",
-		)))
-	}
+		switch args[0] {
+		case "aws-rds-register" :
+			c.UI.DisplayError(errors.New(c.GetMetadata().Commands[0].UsageDetails.Usage))
+		case "aws-rds-create" :
+			c.UI.DisplayError(errors.New(c.GetMetadata().Commands[1].UsageDetails.Usage))
+		case "aws-rds-refresh":
+			c.UI.DisplayError(errors.New(c.GetMetadata().Commands[2].UsageDetails.Usage))
+		}
 }
 
 func (c *BasicPlugin) GetMetadata() plugin.PluginMetadata {
@@ -176,11 +176,27 @@ func (c *BasicPlugin) GetMetadata() plugin.PluginMetadata {
 		},
 		Commands: []plugin.Command{
 			{
-				Name:     "aws-rds",
-				HelpText: "plugin to hook up rds to pws",
+				Name:     "aws-rds-register",
+				HelpText: "command to register existing RDS instance as a service with CF",
 
 				UsageDetails: plugin.Usage{
-					Usage: "aws-rds\n   cf aws-rds",
+					Usage: "cf aws-rds-register SERVICE_NAME --uri URI",
+				},
+			},
+			{
+				Name:     "aws-rds-create",
+				HelpText: "command to create an RDS instance and register it as a service with CF",
+
+				UsageDetails: plugin.Usage{
+					Usage: "cf aws-rds-create SERVICE_NAME",
+				},
+			},
+			{
+				Name:     "aws-rds-refresh",
+				HelpText: "command to update an existing RDS instance and register it as a service with CF (used in case the user quits rds-create command before the instance is fully available)",
+
+				UsageDetails: plugin.Usage{
+					Usage: "cf aws-rds-refresh SERVICE_NAME",
 				},
 			},
 		},
