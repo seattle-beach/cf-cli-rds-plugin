@@ -74,14 +74,6 @@ func (f *CfRDSApi) CreateInstance(instance *DBInstance) chan error {
 	dbPassword := GenerateRandomAlphanumericString()
 	errChan := make(chan error, 1)
 
-	var paramGroup string
-	switch instance.Engine {
-	case "postgres":
-		paramGroup = "default.postgres9.6"
-	default:
-		paramGroup = ""
-	}
-
 	createDBInstanceResp, err := f.Svc.CreateDBInstance(&rds.CreateDBInstanceInput{
 		DBInstanceClass:         aws.String(instance.InstanceClass),
 		DBInstanceIdentifier:    aws.String(instance.InstanceName),
@@ -91,7 +83,6 @@ func (f *CfRDSApi) CreateInstance(instance *DBInstance) chan error {
 		AvailabilityZone:        aws.String(instance.AZ),
 		CopyTagsToSnapshot:      aws.Bool(true),
 		DBName:                  aws.String(dbName),
-		DBParameterGroupName:    aws.String(paramGroup),
 		DBSubnetGroupName:       instance.SubnetGroup.DBSubnetGroupName,
 		MasterUserPassword:      aws.String(dbPassword),
 		MasterUsername:          aws.String(instance.Username),

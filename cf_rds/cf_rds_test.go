@@ -186,6 +186,20 @@ var _ = Describe("CfRds", func() {
 					Expect(ui.Data["SecGroup"]).To(Equal("vpcgroup"))
 				})
 
+				Context("Specifying an Engine", func() {
+					It("creates an RDS DB instance using the specified engine", func() {
+						args = append(args, "--engine", "mysql")
+						p.Run(conn, args)
+						instance := fakeApi.CreateInstanceArgsForCall(0)
+						Expect(instance.Engine).To(Equal("mysql"))
+					})
+					It("defaults to postgres when no engine is specified", func() {
+						p.Run(conn, args)
+						instance := fakeApi.CreateInstanceArgsForCall(0)
+						Expect(instance.Engine).To(Equal("postgres"))
+					})
+				})
+
 			})
 
 			Context("refresh", func() {

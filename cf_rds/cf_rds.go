@@ -99,11 +99,16 @@ func (c *BasicPlugin) Run(cliConnection plugin.CliConnection, args []string) {
 				return
 			}
 
+			engine := "postgres"
+			if len(args) > 3 && args[2] == "--engine" {
+				engine = args[3]
+			}
+
 			dbInstance := &api.DBInstance{
 				InstanceName: serviceName,
 				SubnetGroup: subnetGroups[0],
 				InstanceClass: "db.t2.micro",
-				Engine: "postgres",
+				Engine: engine,
 				Storage: int64(20),
 				AZ: "us-east-1a",
 				Port: int64(5432),
