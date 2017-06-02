@@ -100,6 +100,11 @@ type AwsRdsPluginCommandOptions struct {
 }
 
 func (c *BasicPlugin) AwsRdsCreateRun(cliConnection plugin.CliConnection, args []string) {
+	if len(args) < 2 {
+		c.UI.DisplayError(errors.New(c.GetMetadata().Commands[1].UsageDetails.Usage))
+		return
+	}
+
 	opts := AwsRdsPluginCommandOptions{}
 	extraArgs, err := flags.ParseArgs(&opts, args)
 	serviceName := extraArgs[0]
@@ -131,6 +136,10 @@ func (c *BasicPlugin) AwsRdsCreateRun(cliConnection plugin.CliConnection, args [
 }
 
 func (c *BasicPlugin) AwsRdsRefreshRun(cliConnection plugin.CliConnection, args []string) {
+	if len(args) < 2 {
+		c.UI.DisplayError(errors.New(c.GetMetadata().Commands[2].UsageDetails.Usage))
+		return
+	}
 	serviceName := args[1]
 	dbInstance := &api.DBInstance{
 		InstanceName: serviceName,
@@ -141,6 +150,10 @@ func (c *BasicPlugin) AwsRdsRefreshRun(cliConnection plugin.CliConnection, args 
 }
 
 func (c *BasicPlugin) AwsRdsRegisterRun(cliConnection plugin.CliConnection, args []string) {
+	if len(args) < 4 || args[2] != "--uri" {
+		c.UI.DisplayError(errors.New(c.GetMetadata().Commands[0].UsageDetails.Usage))
+		return
+	}
 	serviceName := args[1]
 	uri, _ := json.Marshal(&UpsOption{
 		Uri: args[3],
@@ -171,23 +184,14 @@ func (c *BasicPlugin) Run(cliConnection plugin.CliConnection, args []string) {
 		return
 	}
 
-	if args[0] == "aws-rds-refresh" && len(args) > 1 {
+	if "aws-rds-refresh" == args[0]{
 		c.AwsRdsRefreshRun(cliConnection, args)
 		return
 	}
 
-	if args[0] == "aws-rds-register" && len(args) == 4 && args[2] == "--uri" {
+	if "aws-rds-register" == args[0] {
 		c.AwsRdsRegisterRun(cliConnection, args)
 		return
-	}
-
-	switch args[0] {
-	case "aws-rds-register":
-		c.UI.DisplayError(errors.New(c.GetMetadata().Commands[0].UsageDetails.Usage))
-	case "aws-rds-create":
-		c.UI.DisplayError(errors.New(c.GetMetadata().Commands[1].UsageDetails.Usage))
-	case "aws-rds-refresh":
-		c.UI.DisplayError(errors.New(c.GetMetadata().Commands[2].UsageDetails.Usage))
 	}
 }
 

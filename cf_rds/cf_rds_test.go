@@ -64,14 +64,12 @@ var _ = Describe("CfRds", func() {
 					It("returns an error if there are not enough arguments", func() {
 						args = []string{"aws-rds-register", "name"}
 						p.Run(conn, args)
-
 						Expect(ui.Err).To(MatchError(ContainSubstring("cf aws-rds-register SERVICE_NAME --uri URI")))
 					})
 
 					It("returns an error if the --uri option flag is not provided", func() {
 						args = []string{"aws-rds-register", "name", "--foo", "postgres://foo"}
 						p.Run(conn, args)
-
 						Expect(ui.Err).To(MatchError(ContainSubstring("cf aws-rds-register SERVICE_NAME --uri URI")))
 					})
 				})
@@ -133,25 +131,6 @@ var _ = Describe("CfRds", func() {
 
 						Expect(ui.Err).To(MatchError(ContainSubstring("cf aws-rds-register SERVICE_NAME --uri URI")))
 					})
-				})
-			})
-			PContext("argument parsing", func() {
-				var ui MockUi
-				var conn *pluginfakes.FakeCliConnection
-				var fakeApi *fakes.FakeApi
-				var p *BasicPlugin
-				//				var args []string
-
-				BeforeEach(func() {
-					conn = &pluginfakes.FakeCliConnection{}
-					ui = MockUi{}
-					fakeApi = &fakes.FakeApi{}
-					//					append(args, "blarh")
-					p = &BasicPlugin{
-						UI:           &ui,
-						Api:          fakeApi,
-						WaitDuration: time.Millisecond,
-					}
 				})
 			})
 
@@ -305,7 +284,14 @@ var _ = Describe("CfRds", func() {
 						Expect(instance.InstanceClass).To(Equal("db.t2.micro"))
 					})
 				})
+				Context("error cases", func() {
+					It("returns an error if there are not enough arguments", func() {
+						args = []string{"aws-rds-create"}
+						p.Run(conn, args)
 
+						Expect(ui.Err).To(MatchError(ContainSubstring("cf aws-rds-create SERVICE_NAME")))
+					})
+				})
 			})
 
 			Context("refresh", func() {
