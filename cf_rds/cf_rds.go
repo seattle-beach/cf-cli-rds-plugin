@@ -99,73 +99,85 @@ type AwsRdsPluginCommandOptions struct {
 	} `command:"aws-rds-create" description:"See global usage."`
 }
 
+func (c *BasicPlugin) AwsRdsCreateRun(cliConnection plugin.CliConnection, args []string) {
+	opts := AwsRdsPluginCommandOptions{}
+	extraArgs, err := flags.ParseArgs(&opts, args)
+	serviceName := extraArgs[0]
+	subnetGroups, err := c.Api.GetSubnetGroups()
+	if err != nil {
+		c.UI.DisplayError(err)
+		return
+	}
+
+	dbInstance := &api.DBInstance{
+		InstanceName:  serviceName,
+		SubnetGroup:   subnetGroups[0],
+		InstanceClass: opts.CreateCmd.Class,
+		Engine:        opts.CreateCmd.Engine,
+		Storage:       opts.CreateCmd.Storage,
+		AZ:            "us-east-1a",
+		Port:          int64(5432),
+		Username:      "root",
+	}
+
+	err = c.createUPS(dbInstance, cliConnection)
+	if err != nil {
+		c.UI.DisplayError(err)
+		return
+	}
+
+	errChan := c.Api.CreateInstance(dbInstance)
+	c.waitForApiResponse(dbInstance, errChan, cliConnection)
+}
+
+func (c *BasicPlugin) AwsRdsRefreshRun(cliConnection plugin.CliConnection, args []string) {
+	serviceName := args[1]
+	dbInstance := &api.DBInstance{
+		InstanceName: serviceName,
+	}
+
+	errChan := c.Api.RefreshInstance(dbInstance)
+	c.waitForApiResponse(dbInstance, errChan, cliConnection)
+}
+
+func (c *BasicPlugin) AwsRdsRegisterRun(cliConnection plugin.CliConnection, args []string) {
+	serviceName := args[1]
+	uri, _ := json.Marshal(&UpsOption{
+		Uri: args[3],
+	})
+	_, err := cliConnection.CliCommand("cups", serviceName, "-p", string(uri))
+	if err != nil {
+		c.UI.DisplayError(err)
+		return
+	}
+
+	space, err := cliConnection.GetCurrentSpace()
+	if err != nil {
+		c.UI.DisplayError(err)
+		return
+	}
+
+	c.UI.DisplayText("Successfully created user-provided service {{.ServiceName}} in space {{.Space}}! You can bind this service to an app using `cf bind-service` or add it to the `services` section in your manifest.yml",
+		map[string]interface{}{
+			"ServiceName": serviceName,
+			"Space":       space.Name,
+		},
+	)
+}
+
 func (c *BasicPlugin) Run(cliConnection plugin.CliConnection, args []string) {
 	if "aws-rds-create" == args[0] {
-		opts := AwsRdsPluginCommandOptions{}
-		extraArgs, err := flags.ParseArgs(&opts, args)
-		serviceName := extraArgs[0]
-		subnetGroups, err := c.Api.GetSubnetGroups()
-		if err != nil {
-			c.UI.DisplayError(err)
-			return
-		}
-
-		dbInstance := &api.DBInstance{
-			InstanceName:  serviceName,
-			SubnetGroup:   subnetGroups[0],
-			InstanceClass: opts.CreateCmd.Class,
-			Engine:        opts.CreateCmd.Engine,
-			Storage:       opts.CreateCmd.Storage,
-			AZ:            "us-east-1a",
-			Port:          int64(5432),
-			Username:      "root",
-		}
-
-		err = c.createUPS(dbInstance, cliConnection)
-		if err != nil {
-			c.UI.DisplayError(err)
-			return
-		}
-
-		errChan := c.Api.CreateInstance(dbInstance)
-		c.waitForApiResponse(dbInstance, errChan, cliConnection)
+		c.AwsRdsCreateRun(cliConnection, args)
 		return
 	}
 
 	if args[0] == "aws-rds-refresh" && len(args) > 1 {
-		serviceName := args[1]
-		dbInstance := &api.DBInstance{
-			InstanceName: serviceName,
-		}
-
-		errChan := c.Api.RefreshInstance(dbInstance)
-		c.waitForApiResponse(dbInstance, errChan, cliConnection)
+		c.AwsRdsRefreshRun(cliConnection, args)
 		return
 	}
 
 	if args[0] == "aws-rds-register" && len(args) == 4 && args[2] == "--uri" {
-		serviceName := args[1]
-		uri, _ := json.Marshal(&UpsOption{
-			Uri: args[3],
-		})
-		_, err := cliConnection.CliCommand("cups", serviceName, "-p", string(uri))
-		if err != nil {
-			c.UI.DisplayError(err)
-			return
-		}
-
-		space, err := cliConnection.GetCurrentSpace()
-		if err != nil {
-			c.UI.DisplayError(err)
-			return
-		}
-
-		c.UI.DisplayText("Successfully created user-provided service {{.ServiceName}} in space {{.Space}}! You can bind this service to an app using `cf bind-service` or add it to the `services` section in your manifest.yml",
-			map[string]interface{}{
-				"ServiceName": serviceName,
-				"Space":       space.Name,
-			},
-		)
+		c.AwsRdsRegisterRun(cliConnection, args)
 		return
 	}
 
