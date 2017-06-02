@@ -3,10 +3,11 @@ package cf_rds
 import (
 	"code.cloudfoundry.org/cli/plugin"
 	"encoding/json"
-	"github.com/cloudfoundry/cli/cf/errors"
-	"time"
-	"github.com/seattle-beach/cf-cli-rds-plugin/api"
 	"github.com/aws/aws-sdk-go/service/rds"
+	"github.com/cloudfoundry/cli/cf/errors"
+	"github.com/jessevdk/go-flags"
+	"github.com/seattle-beach/cf-cli-rds-plugin/api"
+	"time"
 )
 
 type UpsOption struct {
@@ -25,8 +26,8 @@ type Api interface {
 }
 
 type BasicPlugin struct {
-	UI  TinyUI
-	Api Api
+	UI           TinyUI
+	Api          Api
 	WaitDuration time.Duration
 }
 
@@ -74,10 +75,10 @@ func (c *BasicPlugin) waitForApiResponse(instance *api.DBInstance, errChan chan 
 			}
 
 			c.UI.DisplayText("Successfully created user-provided service {{.ServiceName}} exposing RDS Instance {{.Name}}, {{.RDSID}} in AWS VPC {{.VPC}} with Security Group {{.SecGroup}}! You can bind this service to an app using `cf bind-service` or add it to the `services` section in your manifest.yml", map[string]interface{}{
-				"ServiceName":     instance.InstanceName,
-				"RDSID":    instance.ResourceID,
-				"VPC":      *instance.SubnetGroup.VpcId,
-				"SecGroup": *instance.SecGroups[0].VpcSecurityGroupId,
+				"ServiceName": instance.InstanceName,
+				"RDSID":       instance.ResourceID,
+				"VPC":         *instance.SubnetGroup.VpcId,
+				"SecGroup":    *instance.SecGroups[0].VpcSecurityGroupId,
 			})
 			return
 		default:
@@ -90,87 +91,92 @@ func (c *BasicPlugin) waitForApiResponse(instance *api.DBInstance, errChan chan 
 	}
 }
 
+type AwsRdsPluginCommandOptions struct {
+	CreateCmd struct {
+		Engine  string `long:"engine" description:"The name of the RDS database engine to be used for this instance." required:"false" default:"postgres"`
+		Storage int64  `long:"size" description:"The amount of storage in Gb for the RDS instance." required:"false" default:"20"`
+		Class   string `long:"class" description:"The RDS instance type class." required:"false" default:"db.t2.micro"`
+	} `command:"aws-rds-create" description:"See global usage."`
+}
+
 func (c *BasicPlugin) Run(cliConnection plugin.CliConnection, args []string) {
-		if args[0] == "aws-rds-create" && len(args) > 1 {
-			serviceName := args[1]
-			subnetGroups, err := c.Api.GetSubnetGroups()
-			if err != nil {
-				c.UI.DisplayError(err)
-				return
-			}
-
-			engine := "postgres"
-			if len(args) > 3 && args[2] == "--engine" {
-				engine = args[3]
-			}
-
-			dbInstance := &api.DBInstance{
-				InstanceName: serviceName,
-				SubnetGroup: subnetGroups[0],
-				InstanceClass: "db.t2.micro",
-				Engine: engine,
-				Storage: int64(20),
-				AZ: "us-east-1a",
-				Port: int64(5432),
-				Username: "root",
-			}
-
-			err = c.createUPS(dbInstance, cliConnection)
-			if err != nil {
-				c.UI.DisplayError(err)
-				return
-			}
-
-			errChan := c.Api.CreateInstance(dbInstance)
-			c.waitForApiResponse(dbInstance, errChan, cliConnection)
+	if "aws-rds-create" == args[0] {
+		opts := AwsRdsPluginCommandOptions{}
+		extraArgs, err := flags.ParseArgs(&opts, args)
+		serviceName := extraArgs[0]
+		subnetGroups, err := c.Api.GetSubnetGroups()
+		if err != nil {
+			c.UI.DisplayError(err)
 			return
 		}
 
-		if args[0] == "aws-rds-refresh" && len(args) > 1 {
-			serviceName := args[1]
-			dbInstance := &api.DBInstance{
-				InstanceName: serviceName,
-			}
+		dbInstance := &api.DBInstance{
+			InstanceName:  serviceName,
+			SubnetGroup:   subnetGroups[0],
+			InstanceClass: opts.CreateCmd.Class,
+			Engine:        opts.CreateCmd.Engine,
+			Storage:       opts.CreateCmd.Storage,
+			AZ:            "us-east-1a",
+			Port:          int64(5432),
+			Username:      "root",
+		}
 
-			errChan := c.Api.RefreshInstance(dbInstance)
-			c.waitForApiResponse(dbInstance, errChan, cliConnection)
+		err = c.createUPS(dbInstance, cliConnection)
+		if err != nil {
+			c.UI.DisplayError(err)
 			return
 		}
 
-		if args[0] == "aws-rds-register" && len(args) == 4 && args[2] == "--uri" {
-			serviceName := args[1]
-			uri, _ := json.Marshal(&UpsOption{
-				Uri: args[3],
-			})
-			_, err := cliConnection.CliCommand("cups", serviceName, "-p", string(uri))
-			if err != nil {
-				c.UI.DisplayError(err)
-				return
-			}
+		errChan := c.Api.CreateInstance(dbInstance)
+		c.waitForApiResponse(dbInstance, errChan, cliConnection)
+		return
+	}
 
-			space, err := cliConnection.GetCurrentSpace()
-			if err != nil {
-				c.UI.DisplayError(err)
-				return
-			}
+	if args[0] == "aws-rds-refresh" && len(args) > 1 {
+		serviceName := args[1]
+		dbInstance := &api.DBInstance{
+			InstanceName: serviceName,
+		}
 
-			c.UI.DisplayText("Successfully created user-provided service {{.ServiceName}} in space {{.Space}}! You can bind this service to an app using `cf bind-service` or add it to the `services` section in your manifest.yml",
-				map[string]interface{}{
-					"ServiceName":  serviceName,
-					"Space": space.Name,
-				},
-			)
+		errChan := c.Api.RefreshInstance(dbInstance)
+		c.waitForApiResponse(dbInstance, errChan, cliConnection)
+		return
+	}
+
+	if args[0] == "aws-rds-register" && len(args) == 4 && args[2] == "--uri" {
+		serviceName := args[1]
+		uri, _ := json.Marshal(&UpsOption{
+			Uri: args[3],
+		})
+		_, err := cliConnection.CliCommand("cups", serviceName, "-p", string(uri))
+		if err != nil {
+			c.UI.DisplayError(err)
 			return
 		}
 
-		switch args[0] {
-		case "aws-rds-register" :
-			c.UI.DisplayError(errors.New(c.GetMetadata().Commands[0].UsageDetails.Usage))
-		case "aws-rds-create" :
-			c.UI.DisplayError(errors.New(c.GetMetadata().Commands[1].UsageDetails.Usage))
-		case "aws-rds-refresh":
-			c.UI.DisplayError(errors.New(c.GetMetadata().Commands[2].UsageDetails.Usage))
+		space, err := cliConnection.GetCurrentSpace()
+		if err != nil {
+			c.UI.DisplayError(err)
+			return
 		}
+
+		c.UI.DisplayText("Successfully created user-provided service {{.ServiceName}} in space {{.Space}}! You can bind this service to an app using `cf bind-service` or add it to the `services` section in your manifest.yml",
+			map[string]interface{}{
+				"ServiceName": serviceName,
+				"Space":       space.Name,
+			},
+		)
+		return
+	}
+
+	switch args[0] {
+	case "aws-rds-register":
+		c.UI.DisplayError(errors.New(c.GetMetadata().Commands[0].UsageDetails.Usage))
+	case "aws-rds-create":
+		c.UI.DisplayError(errors.New(c.GetMetadata().Commands[1].UsageDetails.Usage))
+	case "aws-rds-refresh":
+		c.UI.DisplayError(errors.New(c.GetMetadata().Commands[2].UsageDetails.Usage))
+	}
 }
 
 func (c *BasicPlugin) GetMetadata() plugin.PluginMetadata {

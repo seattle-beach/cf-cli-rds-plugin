@@ -1,17 +1,18 @@
 package cf_rds_test
 
 import (
-	"code.cloudfoundry.org/cli/plugin/pluginfakes"
+	"code.cloudfoundry.org/cli/plugin"
 	"code.cloudfoundry.org/cli/plugin/models"
+	"code.cloudfoundry.org/cli/plugin/pluginfakes"
+	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/service/rds"
+	//	"github.com/maxbrunsfeld/counterfeiter/arguments"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+	"github.com/seattle-beach/cf-cli-rds-plugin/api"
 	. "github.com/seattle-beach/cf-cli-rds-plugin/cf_rds"
 	"github.com/seattle-beach/cf-cli-rds-plugin/cf_rds/fakes"
-	"github.com/aws/aws-sdk-go/service/rds"
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/seattle-beach/cf-cli-rds-plugin/api"
 	"time"
-	"code.cloudfoundry.org/cli/plugin"
 )
 
 var _ = Describe("CfRds", func() {
@@ -73,6 +74,84 @@ var _ = Describe("CfRds", func() {
 
 						Expect(ui.Err).To(MatchError(ContainSubstring("cf aws-rds-register SERVICE_NAME --uri URI")))
 					})
+				})
+			})
+
+			Context("register", func() {
+				var ui MockUi
+				var conn *pluginfakes.FakeCliConnection
+				var p *BasicPlugin
+				var args []string
+
+				BeforeEach(func() {
+					conn = &pluginfakes.FakeCliConnection{}
+					ui = MockUi{}
+
+					p = &BasicPlugin{
+						UI: &ui,
+					}
+					args = []string{"aws-rds-register", "name", "--uri", "postgres://user:pwd@example.com:5432/database"}
+				})
+
+				It("creates a user-provided service with user-provided RDS instance", func() {
+					p.Run(conn, args)
+					Expect(conn.CliCommandCallCount()).To(Equal(1))
+					Expect(conn.CliCommandArgsForCall(0)).To(Equal([]string{"cups", "name", "-p", "{\"uri\":\"postgres://user:pwd@example.com:5432/database\"}"}))
+				})
+
+				Context("success message", func() {
+					BeforeEach(func() {
+						conn.GetCurrentSpaceReturns(plugin_models.Space{
+							plugin_models.SpaceFields{
+								Guid: "fake-guid",
+								Name: "fake-space",
+							},
+						}, nil)
+					})
+
+					It("displays success message", func() {
+						p.Run(conn, args)
+						Expect(ui.TextTemplate).To(Equal("Successfully created user-provided service {{.ServiceName}} in space {{.Space}}! You can bind this service to an app using `cf bind-service` or add it to the `services` section in your manifest.yml"))
+						Expect(ui.Data).To(Equal(map[string]interface{}{
+							"ServiceName": "name",
+							"Space":       "fake-space",
+						}))
+					})
+				})
+
+				Context("error cases", func() {
+					It("returns an error if there are not enough arguments", func() {
+						args = []string{"aws-rds-register", "name"}
+						p.Run(conn, args)
+
+						Expect(ui.Err).To(MatchError(ContainSubstring("cf aws-rds-register SERVICE_NAME --uri URI")))
+					})
+
+					It("returns an error if the --uri option flag is not provided", func() {
+						args = []string{"aws-rds-register", "name", "--foo", "postgres://foo"}
+						p.Run(conn, args)
+
+						Expect(ui.Err).To(MatchError(ContainSubstring("cf aws-rds-register SERVICE_NAME --uri URI")))
+					})
+				})
+			})
+			PContext("argument parsing", func() {
+				var ui MockUi
+				var conn *pluginfakes.FakeCliConnection
+				var fakeApi *fakes.FakeApi
+				var p *BasicPlugin
+				//				var args []string
+
+				BeforeEach(func() {
+					conn = &pluginfakes.FakeCliConnection{}
+					ui = MockUi{}
+					fakeApi = &fakes.FakeApi{}
+					//					append(args, "blarh")
+					p = &BasicPlugin{
+						UI:           &ui,
+						Api:          fakeApi,
+						WaitDuration: time.Millisecond,
+					}
 				})
 			})
 
@@ -197,6 +276,33 @@ var _ = Describe("CfRds", func() {
 						p.Run(conn, args)
 						instance := fakeApi.CreateInstanceArgsForCall(0)
 						Expect(instance.Engine).To(Equal("postgres"))
+					})
+				})
+
+				Context("Specifying a storage size", func() {
+					It("creates an RDS DB instance using the specified storage size", func() {
+						args = append(args, "--size", "10")
+						p.Run(conn, args)
+						instance := fakeApi.CreateInstanceArgsForCall(0)
+						Expect(instance.Storage).To(Equal(int64(10)))
+					})
+					It("defaults to 20 when no size is specified", func() {
+						p.Run(conn, args)
+						instance := fakeApi.CreateInstanceArgsForCall(0)
+						Expect(instance.Storage).To(Equal(int64(20)))
+					})
+				})
+				Context("Specifying an instance class", func() {
+					It("creates an RDS DB instance using the specified storage size", func() {
+						args = append(args, "--class", "db.not.a.default")
+						p.Run(conn, args)
+						instance := fakeApi.CreateInstanceArgsForCall(0)
+						Expect(instance.InstanceClass).To(Equal("db.not.a.default"))
+					})
+					It("defaults to db.t2.micro when no class provided", func() {
+						p.Run(conn, args)
+						instance := fakeApi.CreateInstanceArgsForCall(0)
+						Expect(instance.InstanceClass).To(Equal("db.t2.micro"))
 					})
 				})
 
