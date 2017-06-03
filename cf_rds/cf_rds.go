@@ -4,7 +4,6 @@ import (
 	"code.cloudfoundry.org/cli/plugin"
 	"encoding/json"
 	"github.com/aws/aws-sdk-go/service/rds"
-	"github.com/cloudfoundry/cli/cf/errors"
 	"github.com/jessevdk/go-flags"
 	"github.com/seattle-beach/cf-cli-rds-plugin/api"
 	"time"
@@ -101,7 +100,7 @@ type AwsRdsPluginCommandOptions struct {
 
 func (c *BasicPlugin) AwsRdsCreateRun(cliConnection plugin.CliConnection, args []string) {
 	if len(args) < 2 {
-		c.UI.DisplayError(errors.New(c.GetMetadata().Commands[1].UsageDetails.Usage))
+		cliConnection.CliCommand("help", "aws-rds-create")
 		return
 	}
 
@@ -137,7 +136,7 @@ func (c *BasicPlugin) AwsRdsCreateRun(cliConnection plugin.CliConnection, args [
 
 func (c *BasicPlugin) AwsRdsRefreshRun(cliConnection plugin.CliConnection, args []string) {
 	if len(args) < 2 {
-		c.UI.DisplayError(errors.New(c.GetMetadata().Commands[2].UsageDetails.Usage))
+		cliConnection.CliCommand("help", "aws-rds-refresh")
 		return
 	}
 	serviceName := args[1]
@@ -148,10 +147,9 @@ func (c *BasicPlugin) AwsRdsRefreshRun(cliConnection plugin.CliConnection, args 
 	errChan := c.Api.RefreshInstance(dbInstance)
 	c.waitForApiResponse(dbInstance, errChan, cliConnection)
 }
-
 func (c *BasicPlugin) AwsRdsRegisterRun(cliConnection plugin.CliConnection, args []string) {
 	if len(args) < 4 || args[2] != "--uri" {
-		c.UI.DisplayError(errors.New(c.GetMetadata().Commands[0].UsageDetails.Usage))
+		cliConnection.CliCommand("help", "aws-rds-register")
 		return
 	}
 	serviceName := args[1]

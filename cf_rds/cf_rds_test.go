@@ -61,75 +61,16 @@ var _ = Describe("CfRds", func() {
 				})
 
 				Context("error cases", func() {
-					It("returns an error if there are not enough arguments", func() {
-						args = []string{"aws-rds-register", "name"}
+					It("displays usage if there are no arguments", func() {
+						args = []string{"aws-rds-register"}
 						p.Run(conn, args)
-						Expect(ui.Err).To(MatchError(ContainSubstring("cf aws-rds-register SERVICE_NAME --uri URI")))
+						Expect(conn.CliCommandArgsForCall(0)).To(Equal([]string{"help", "aws-rds-register"}))
 					})
 
-					It("returns an error if the --uri option flag is not provided", func() {
+					It("displays usage --uri option flag is not provided", func() {
 						args = []string{"aws-rds-register", "name", "--foo", "postgres://foo"}
 						p.Run(conn, args)
-						Expect(ui.Err).To(MatchError(ContainSubstring("cf aws-rds-register SERVICE_NAME --uri URI")))
-					})
-				})
-			})
-
-			Context("register", func() {
-				var ui MockUi
-				var conn *pluginfakes.FakeCliConnection
-				var p *BasicPlugin
-				var args []string
-
-				BeforeEach(func() {
-					conn = &pluginfakes.FakeCliConnection{}
-					ui = MockUi{}
-
-					p = &BasicPlugin{
-						UI: &ui,
-					}
-					args = []string{"aws-rds-register", "name", "--uri", "postgres://user:pwd@example.com:5432/database"}
-				})
-
-				It("creates a user-provided service with user-provided RDS instance", func() {
-					p.Run(conn, args)
-					Expect(conn.CliCommandCallCount()).To(Equal(1))
-					Expect(conn.CliCommandArgsForCall(0)).To(Equal([]string{"cups", "name", "-p", "{\"uri\":\"postgres://user:pwd@example.com:5432/database\"}"}))
-				})
-
-				Context("success message", func() {
-					BeforeEach(func() {
-						conn.GetCurrentSpaceReturns(plugin_models.Space{
-							plugin_models.SpaceFields{
-								Guid: "fake-guid",
-								Name: "fake-space",
-							},
-						}, nil)
-					})
-
-					It("displays success message", func() {
-						p.Run(conn, args)
-						Expect(ui.TextTemplate).To(Equal("Successfully created user-provided service {{.ServiceName}} in space {{.Space}}! You can bind this service to an app using `cf bind-service` or add it to the `services` section in your manifest.yml"))
-						Expect(ui.Data).To(Equal(map[string]interface{}{
-							"ServiceName": "name",
-							"Space":       "fake-space",
-						}))
-					})
-				})
-
-				Context("error cases", func() {
-					It("returns an error if there are not enough arguments", func() {
-						args = []string{"aws-rds-register", "name"}
-						p.Run(conn, args)
-
-						Expect(ui.Err).To(MatchError(ContainSubstring("cf aws-rds-register SERVICE_NAME --uri URI")))
-					})
-
-					It("returns an error if the --uri option flag is not provided", func() {
-						args = []string{"aws-rds-register", "name", "--foo", "postgres://foo"}
-						p.Run(conn, args)
-
-						Expect(ui.Err).To(MatchError(ContainSubstring("cf aws-rds-register SERVICE_NAME --uri URI")))
+						Expect(conn.CliCommandArgsForCall(0)).To(Equal([]string{"help", "aws-rds-register"}))
 					})
 				})
 			})
@@ -288,8 +229,7 @@ var _ = Describe("CfRds", func() {
 					It("returns an error if there are not enough arguments", func() {
 						args = []string{"aws-rds-create"}
 						p.Run(conn, args)
-
-						Expect(ui.Err).To(MatchError(ContainSubstring("cf aws-rds-create SERVICE_NAME")))
+						Expect(conn.CliCommandArgsForCall(0)).To(Equal([]string{"help", "aws-rds-create"}))
 					})
 				})
 			})
@@ -369,6 +309,14 @@ var _ = Describe("CfRds", func() {
 					Expect(ui.Data["RDSID"]).To(Equal("resourceid"))
 					Expect(ui.Data["VPC"]).To(Equal("vpcid"))
 					Expect(ui.Data["SecGroup"]).To(Equal("vpcgroup"))
+				})
+
+				Context("error cases", func() {
+					It("returns an error if there are not enough arguments", func() {
+						args = []string{"aws-rds-refresh"}
+						p.Run(conn, args)
+						Expect(conn.CliCommandArgsForCall(0)).To(Equal([]string{"help", "aws-rds-refresh"}))
+					})
 				})
 			})
 		})
