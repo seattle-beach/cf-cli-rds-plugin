@@ -16,6 +16,7 @@ type UpsOption struct {
 type TinyUI interface {
 	DisplayError(err error)
 	DisplayText(template string, data ...map[string]interface{})
+	DisplayKeyValueTable(prefix string, table [][]string, padding int)
 }
 
 type Api interface {
@@ -72,13 +73,15 @@ func (c *BasicPlugin) waitForApiResponse(instance *api.DBInstance, errChan chan 
 				c.UI.DisplayError(err)
 				return
 			}
-
-			c.UI.DisplayText("Successfully created user-provided service {{.ServiceName}} exposing RDS Instance {{.Name}}, {{.RDSID}} in AWS VPC {{.VPC}} with Security Group {{.SecGroup}}! You can bind this service to an app using `cf bind-service` or add it to the `services` section in your manifest.yml", map[string]interface{}{
-				"ServiceName": instance.InstanceName,
-				"RDSID":       instance.ResourceID,
-				"VPC":         *instance.SubnetGroup.VpcId,
-				"SecGroup":    *instance.SecGroups[0].VpcSecurityGroupId,
+			c.UI.DisplayText("AWS RDS Instance:\n{{.instance}}", map[string]interface{}{
+				"instance": instance.InstanceName,
 			})
+			c.UI.DisplayKeyValueTable("", [][]string{
+				{"ARN:", instance.ARN},
+				{"RDSID:", instance.ResourceID},
+				{"VPC:", *instance.SubnetGroup.VpcId},
+				{"SecGroup:", *instance.SecGroups[0].VpcSecurityGroupId}},
+				2)
 			return
 		default:
 			nextCheckTime := time.Now().Add(c.WaitDuration)
@@ -188,7 +191,7 @@ func (c *BasicPlugin) Run(cliConnection plugin.CliConnection, args []string) {
 		return
 	}
 
-	if "aws-rds-refresh" == args[0]{
+	if "aws-rds-refresh" == args[0] {
 		c.AwsRdsRefreshRun(cliConnection, args)
 		return
 	}

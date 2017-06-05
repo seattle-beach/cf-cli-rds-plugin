@@ -178,11 +178,11 @@ var _ = Describe("CfRds", func() {
 
 				It("prints a success message", func() {
 					p.Run(conn, args)
-					Expect(ui.TextTemplate).To(Equal("Successfully created user-provided service {{.ServiceName}} exposing RDS Instance {{.Name}}, {{.RDSID}} in AWS VPC {{.VPC}} with Security Group {{.SecGroup}}! You can bind this service to an app using `cf bind-service` or add it to the `services` section in your manifest.yml"))
-					Expect(ui.Data["ServiceName"]).To(Equal("name"))
-					Expect(ui.Data["RDSID"]).To(Equal("resourceid"))
-					Expect(ui.Data["VPC"]).To(Equal("vpcid"))
-					Expect(ui.Data["SecGroup"]).To(Equal("vpcgroup"))
+					Expect(ui.Table).To(Equal([][]string{
+						{"ARN:", "arn:aws:rds:us-east-1:10101010:db:name"},
+						{"RDSID:", "resourceid"},
+						{"VPC:","vpcid"},
+						{"SecGroup:", "vpcgroup"}}))
 				})
 
 				Context("Specifying an Engine", func() {
@@ -302,14 +302,6 @@ var _ = Describe("CfRds", func() {
 				}`))
 				})
 
-				It("prints a success message", func() {
-					p.Run(conn, args)
-					Expect(ui.TextTemplate).To(Equal("Successfully created user-provided service {{.ServiceName}} exposing RDS Instance {{.Name}}, {{.RDSID}} in AWS VPC {{.VPC}} with Security Group {{.SecGroup}}! You can bind this service to an app using `cf bind-service` or add it to the `services` section in your manifest.yml"))
-					Expect(ui.Data["ServiceName"]).To(Equal("name"))
-					Expect(ui.Data["RDSID"]).To(Equal("resourceid"))
-					Expect(ui.Data["VPC"]).To(Equal("vpcid"))
-					Expect(ui.Data["SecGroup"]).To(Equal("vpcgroup"))
-				})
 
 				Context("error cases", func() {
 					It("returns an error if there are not enough arguments", func() {
@@ -390,6 +382,9 @@ type MockUi struct {
 	TextTemplate string
 	Err          error
 	Data         map[string]interface{}
+	Prefix       string
+	Table        [][]string
+	Padding      int
 }
 
 func (u *MockUi) DisplayText(template string, data ...map[string]interface{}) {
@@ -401,4 +396,10 @@ func (u *MockUi) DisplayText(template string, data ...map[string]interface{}) {
 
 func (u *MockUi) DisplayError(err error) {
 	u.Err = err
+}
+
+func (u *MockUi) DisplayKeyValueTable(prefix string, table [][]string, padding int) {
+	u.Prefix = prefix
+	u.Table = table
+	u.Padding = padding
 }
