@@ -317,6 +317,12 @@ var _ = Describe("CfRds", func() {
 						p.Run(conn, args)
 						Expect(conn.CliCommandArgsForCall(0)).To(Equal([]string{"help", "aws-rds-refresh"}))
 					})
+
+					It("returns an error if arguments are invalid", func() {
+						args = []string{"aws-rds-refresh", "--pizza", "nacho"}
+						p.Run(conn, args)
+						Expect(conn.CliCommandArgsForCall(0)).To(Equal([]string{"help", "aws-rds-refresh"}))
+					})
 				})
 			})
 		})

@@ -96,6 +96,8 @@ type AwsRdsPluginCommandOptions struct {
 		Storage int64  `long:"size" description:"The amount of storage in Gb for the RDS instance." required:"false" default:"20"`
 		Class   string `long:"class" description:"The RDS instance type class." required:"false" default:"db.t2.micro"`
 	} `command:"aws-rds-create" description:"See global usage."`
+	RefreshCmd struct {
+	} `command:"aws-rds-refresh" description:"See global usage."`
 }
 
 func (c *BasicPlugin) AwsRdsCreateRun(cliConnection plugin.CliConnection, args []string) {
@@ -135,11 +137,15 @@ func (c *BasicPlugin) AwsRdsCreateRun(cliConnection plugin.CliConnection, args [
 }
 
 func (c *BasicPlugin) AwsRdsRefreshRun(cliConnection plugin.CliConnection, args []string) {
-	if len(args) < 2 {
+	opts := AwsRdsPluginCommandOptions{}
+	extraArgs, err := flags.ParseArgs(&opts, args)
+
+	if err != nil || len(extraArgs) != 1 {
 		cliConnection.CliCommand("help", "aws-rds-refresh")
 		return
 	}
-	serviceName := args[1]
+
+	serviceName := extraArgs[0]
 	dbInstance := &api.DBInstance{
 		InstanceName: serviceName,
 	}
