@@ -186,19 +186,20 @@ func (c *BasicPlugin) AwsRdsRegisterRun(cliConnection plugin.CliConnection, args
 }
 
 func (c *BasicPlugin) Run(cliConnection plugin.CliConnection, args []string) {
-	if "aws-rds-create" == args[0] {
+
+
+	switch args[0] {
+	case "aws-rds-create":
 		c.AwsRdsCreateRun(cliConnection, args)
 		return
-	}
-
-	if "aws-rds-refresh" == args[0] {
+	case "aws-rds-refresh":
 		c.AwsRdsRefreshRun(cliConnection, args)
 		return
-	}
-
-	if "aws-rds-register" == args[0] {
+	case "aws-rds-register":
 		c.AwsRdsRegisterRun(cliConnection, args)
 		return
+	default:
+		// TODO Show Usage
 	}
 }
 
