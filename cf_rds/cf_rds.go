@@ -105,6 +105,21 @@ type AwsRdsPluginCommandOptions struct {
 	} `command:"aws-rds-refresh" description:"See global usage."`
 }
 
+func handleErrors(cmd string, err error, args []string, cliConnection plugin.CliConnection) bool {
+	if err != nil {
+		fmt.Println(fmt.Sprintf("Incorrect Usage: %v", err))
+		cliConnection.CliCommand("help", cmd)
+		return true
+	}
+
+	if len(args) != 1 {
+		cliConnection.CliCommand("help", cmd)
+		return true
+	}
+
+	return false
+}
+
 func (c *BasicPlugin) AwsRdsCreateRun(cliConnection plugin.CliConnection, args []string) {
 
 	opts := AwsRdsPluginCommandOptions{}
@@ -112,14 +127,7 @@ func (c *BasicPlugin) AwsRdsCreateRun(cliConnection plugin.CliConnection, args [
 	parser := flags.NewParser(&opts, flags.None)
 	extraArgs, err := parser.ParseArgs(args)
 
-	if err != nil {
-		fmt.Println(fmt.Sprintf("Incorrect Usage: %v", err))
-		cliConnection.CliCommand("help", "aws-rds-create")
-		return
-	}
-
-	if len(extraArgs) != 1 {
-		cliConnection.CliCommand("help", "aws-rds-create")
+	if handleErrors("aws-rds-create", err, extraArgs, cliConnection) {
 		return
 	}
 
@@ -157,13 +165,7 @@ func (c *BasicPlugin) AwsRdsRefreshRun(cliConnection plugin.CliConnection, args 
 	parser := flags.NewParser(&opts, flags.None)
 	extraArgs, err := parser.ParseArgs(args)
 
-	if err != nil {
-		fmt.Println(fmt.Sprintf("Incorrect Usage: %v", err))
-		cliConnection.CliCommand("help", "aws-rds-refresh")
-	}
-
-	if len(extraArgs) != 1 {
-		cliConnection.CliCommand("help", "aws-rds-refresh")
+	if handleErrors("aws-rds-refresh", err, extraArgs, cliConnection) {
 		return
 	}
 
@@ -186,16 +188,10 @@ func (c *BasicPlugin) AwsRdsRegisterRun(cliConnection plugin.CliConnection, args
 	parser := flags.NewParser(&opts, flags.None)
 	extraArgs, err := parser.ParseArgs(args)
 
-	if err != nil {
-		fmt.Println(fmt.Sprintf("Incorrect Usage: %v", err))
-		cliConnection.CliCommand("help", "aws-rds-register")
+	if handleErrors("aws-rds-register", err, extraArgs, cliConnection) {
 		return
 	}
 
-	if len(extraArgs) != 1 {
-		cliConnection.CliCommand("help", "aws-rds-register")
-		return
-	}
 	serviceName := extraArgs[0]
 	uri, _ := json.Marshal(&UpsOption{
 		Uri: opts.Uri,
