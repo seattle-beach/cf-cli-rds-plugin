@@ -88,7 +88,7 @@ func (c *BasicPlugin) waitForApiResponse(instance *api.DBInstance, errChan chan 
 			return
 		default:
 			nextCheckTime := time.Now().Add(c.WaitDuration)
-			c.UI.DisplayText("Checking connectivity... not available yet, will check again at {{.Time}}", map[string]interface{}{
+			c.UI.DisplayText("RDS instance not available yet, next check at {{.Time}}", map[string]interface{}{
 				"Time": nextCheckTime.Format("15:04:05"),
 			})
 			time.Sleep(1 * c.WaitDuration)
