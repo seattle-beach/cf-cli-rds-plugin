@@ -109,6 +109,7 @@ func handleErrors(cmd string, err error, args []string, cliConnection plugin.Cli
 
 	return false
 }
+
 type AwsRdsCreateOptions struct {
 	Engine  string `long:"engine" description:"The name of the RDS database engine to be used for this instance." required:"false" default:"postgres"`
 	Storage int64  `long:"size" description:"The amount of storage in Gb for the RDS instance." required:"false" default:"20"`
@@ -153,7 +154,8 @@ func (c *BasicPlugin) AwsRdsCreateRun(cliConnection plugin.CliConnection, args [
 	errChan := c.Api.CreateInstance(dbInstance)
 	c.waitForApiResponse(dbInstance, errChan, cliConnection)
 }
-type AwsRdsRefreshOptions struct {}
+
+type AwsRdsRefreshOptions struct{}
 
 func (c *BasicPlugin) AwsRdsRefreshRun(cliConnection plugin.CliConnection, args []string) {
 
@@ -214,15 +216,18 @@ func (c *BasicPlugin) AwsRdsRegisterRun(cliConnection plugin.CliConnection, args
 
 func (c *BasicPlugin) Run(cliConnection plugin.CliConnection, args []string) {
 
-	switch args[0] {
+	cmd := args[0]
+	cmdArgs := args[1:]
+
+	switch cmd {
 	case "aws-rds-create":
-		c.AwsRdsCreateRun(cliConnection, args[1:])
+		c.AwsRdsCreateRun(cliConnection, cmdArgs)
 		return
 	case "aws-rds-refresh":
-		c.AwsRdsRefreshRun(cliConnection, args[1:])
+		c.AwsRdsRefreshRun(cliConnection, cmdArgs)
 		return
 	case "aws-rds-register":
-		c.AwsRdsRegisterRun(cliConnection, args[1:])
+		c.AwsRdsRegisterRun(cliConnection, cmdArgs)
 		return
 	default:
 		// TODO Show Usage
