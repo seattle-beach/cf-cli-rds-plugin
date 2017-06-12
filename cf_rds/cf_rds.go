@@ -2,10 +2,11 @@ package cf_rds
 
 import (
 	"encoding/json"
+	"fmt"
+	"os"
 	"time"
 
 	"code.cloudfoundry.org/cli/plugin"
-	"fmt"
 	"github.com/aws/aws-sdk-go/service/rds"
 	"github.com/jessevdk/go-flags"
 	"github.com/seattle-beach/cf-cli-rds-plugin/api"
@@ -95,6 +96,21 @@ func (c *BasicPlugin) waitForApiResponse(instance *api.DBInstance, errChan chan 
 	}
 }
 
+type AwsRdsOptions interface {
+	SetServiceName(string)
+}
+
+func getOptions(opts AwsRdsOptions, cliConnection plugin.CliConnection, args []string) {
+	parser := flags.NewParser(opts, flags.None)
+	extraArgs, err := parser.ParseArgs(args[1:])
+
+	if handleErrors(args[0], err, extraArgs, cliConnection) {
+		os.Exit(-1)
+	}
+
+	opts.SetServiceName(extraArgs[0])
+}
+
 func handleErrors(cmd string, err error, args []string, cliConnection plugin.CliConnection) bool {
 	if err != nil {
 		fmt.Println(fmt.Sprintf("Incorrect Usage: %v", err))
@@ -111,23 +127,20 @@ func handleErrors(cmd string, err error, args []string, cliConnection plugin.Cli
 }
 
 type AwsRdsCreateOptions struct {
-	Engine  string `long:"engine" description:"The name of the RDS database engine to be used for this instance." required:"false" default:"postgres"`
-	Storage int64  `long:"size" description:"The amount of storage in Gb for the RDS instance." required:"false" default:"20"`
-	Class   string `long:"class" description:"The RDS instance type class." required:"false" default:"db.t2.micro"`
+	ServiceName string
+	Engine      string `long:"engine" description:"The name of the RDS database engine to be used for this instance." required:"false" default:"postgres"`
+	Storage     int64  `long:"size" description:"The amount of storage in Gb for the RDS instance." required:"false" default:"20"`
+	Class       string `long:"class" description:"The RDS instance type class." required:"false" default:"db.t2.micro"`
+}
+
+func (a *AwsRdsCreateOptions) SetServiceName(name string) {
+	a.ServiceName = name
 }
 
 func (c *BasicPlugin) AwsRdsCreateRun(cliConnection plugin.CliConnection, args []string) {
-
 	opts := AwsRdsCreateOptions{}
+	getOptions(&opts, cliConnection, args)
 
-	parser := flags.NewParser(&opts, flags.None)
-	extraArgs, err := parser.ParseArgs(args)
-
-	if handleErrors("aws-rds-create", err, extraArgs, cliConnection) {
-		return
-	}
-
-	serviceName := extraArgs[0]
 	subnetGroups, err := c.Api.GetSubnetGroups()
 	if err != nil {
 		c.UI.DisplayError(err)
@@ -135,7 +148,7 @@ func (c *BasicPlugin) AwsRdsCreateRun(cliConnection plugin.CliConnection, args [
 	}
 
 	dbInstance := &api.DBInstance{
-		InstanceName:  serviceName,
+		InstanceName:  opts.ServiceName,
 		SubnetGroup:   subnetGroups[0],
 		InstanceClass: opts.Class,
 		Engine:        opts.Engine,
@@ -155,21 +168,20 @@ func (c *BasicPlugin) AwsRdsCreateRun(cliConnection plugin.CliConnection, args [
 	c.waitForApiResponse(dbInstance, errChan, cliConnection)
 }
 
-type AwsRdsRefreshOptions struct{}
+type AwsRdsRefreshOptions struct {
+	ServiceName string
+}
+
+func (a *AwsRdsRefreshOptions) SetServiceName(name string) {
+	a.ServiceName = name
+}
 
 func (c *BasicPlugin) AwsRdsRefreshRun(cliConnection plugin.CliConnection, args []string) {
-
 	opts := AwsRdsRefreshOptions{}
-	parser := flags.NewParser(&opts, flags.None)
-	extraArgs, err := parser.ParseArgs(args)
+	getOptions(&opts, cliConnection, args)
 
-	if handleErrors("aws-rds-refresh", err, extraArgs, cliConnection) {
-		return
-	}
-
-	serviceName := extraArgs[0]
 	dbInstance := &api.DBInstance{
-		InstanceName: serviceName,
+		InstanceName: opts.ServiceName,
 	}
 
 	errChan := c.Api.RefreshInstance(dbInstance)
@@ -177,24 +189,22 @@ func (c *BasicPlugin) AwsRdsRefreshRun(cliConnection plugin.CliConnection, args 
 }
 
 type AwsRdsRegisterOptions struct {
-	Uri string `long:"uri" description:"" required:"true"`
+	ServiceName string
+	Uri         string `long:"uri" description:"" required:"true"`
+}
+
+func (a *AwsRdsRegisterOptions) SetServiceName(name string) {
+	a.ServiceName = name
 }
 
 func (c *BasicPlugin) AwsRdsRegisterRun(cliConnection plugin.CliConnection, args []string) {
-
 	opts := AwsRdsRegisterOptions{}
-	parser := flags.NewParser(&opts, flags.None)
-	extraArgs, err := parser.ParseArgs(args)
+	getOptions(&opts, cliConnection, args)
 
-	if handleErrors("aws-rds-register", err, extraArgs, cliConnection) {
-		return
-	}
-
-	serviceName := extraArgs[0]
 	uri, _ := json.Marshal(&UpsOption{
 		Uri: opts.Uri,
 	})
-	_, err = cliConnection.CliCommand("cups", serviceName, "-p", string(uri))
+	_, err := cliConnection.CliCommand("cups", opts.ServiceName, "-p", string(uri))
 	if err != nil {
 		c.UI.DisplayError(err)
 		return
@@ -208,26 +218,22 @@ func (c *BasicPlugin) AwsRdsRegisterRun(cliConnection plugin.CliConnection, args
 
 	c.UI.DisplayText("Successfully created user-provided service {{.ServiceName}} in space {{.Space}}! You can bind this service to an app using `cf bind-service` or add it to the `services` section in your manifest.yml",
 		map[string]interface{}{
-			"ServiceName": serviceName,
+			"ServiceName": opts.ServiceName,
 			"Space":       space.Name,
 		},
 	)
 }
 
 func (c *BasicPlugin) Run(cliConnection plugin.CliConnection, args []string) {
-
-	cmd := args[0]
-	cmdArgs := args[1:]
-
-	switch cmd {
+	switch args[0] {
 	case "aws-rds-create":
-		c.AwsRdsCreateRun(cliConnection, cmdArgs)
+		c.AwsRdsCreateRun(cliConnection, args)
 		return
 	case "aws-rds-refresh":
-		c.AwsRdsRefreshRun(cliConnection, cmdArgs)
+		c.AwsRdsRefreshRun(cliConnection, args)
 		return
 	case "aws-rds-register":
-		c.AwsRdsRegisterRun(cliConnection, cmdArgs)
+		c.AwsRdsRegisterRun(cliConnection, args)
 		return
 	default:
 		// TODO Show Usage
