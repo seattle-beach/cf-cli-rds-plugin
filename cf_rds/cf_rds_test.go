@@ -112,7 +112,7 @@ var _ = Describe("CfRds", func() {
 
 					fakeApi.GetSubnetGroupsReturns([]*rds.DBSubnetGroup{subnetGroup}, nil)
 
-					fakeApi.CreateInstanceStub = func(instance *api.DBInstance) chan error {
+					fakeApi.CreateInstanceStub = func(instance *api.DBInstance) (chan error, error) {
 						errChan := make(chan error, 1)
 						errChan <- nil
 
@@ -125,7 +125,7 @@ var _ = Describe("CfRds", func() {
 						instance.Password = "password"
 						instance.DBURI = "postgres://root:password@test-uri.us-east-1.rds.amazonaws.com:5432/database"
 
-						return errChan
+						return errChan, nil
 					}
 				})
 

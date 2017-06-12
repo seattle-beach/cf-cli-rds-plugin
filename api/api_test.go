@@ -157,8 +157,9 @@ var _ = Describe("Api", func() {
 		})
 
 		It("creates an RDS instance with the given parameters", func() {
-			errChan := cfRDSApi.CreateInstance(instance)
-			err := <- errChan
+			errChan, err := cfRDSApi.CreateInstance(instance)
+			Expect(err).NotTo(HaveOccurred())
+			err = <- errChan
 			Expect(err).NotTo(HaveOccurred())
 
 			Expect(fakeRDSSvc.CreateDBInstanceCallCount()).To(Equal(1))
@@ -181,7 +182,7 @@ var _ = Describe("Api", func() {
 		})
 
 		It("polls until the RDS instance is available", func() {
-			errChan := cfRDSApi.CreateInstance(instance)
+			errChan, _ := cfRDSApi.CreateInstance(instance)
 			err := <- errChan
 			Expect(err).NotTo(HaveOccurred())
 
@@ -203,8 +204,7 @@ var _ = Describe("Api", func() {
 				})
 
 				It("should return an error", func() {
-					errChan := cfRDSApi.CreateInstance(instance)
-					err := <- errChan
+					_, err := cfRDSApi.CreateInstance(instance)
 					Expect(err).To(MatchError("Error: do not have any VPC security groups to associate with RDS instance"))
 				})
 			})

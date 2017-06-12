@@ -69,10 +69,9 @@ func (f *CfRDSApi) GetSubnetGroups() ([]*rds.DBSubnetGroup, error) {
 	return subnetGroups, nil
 }
 
-func (f *CfRDSApi) CreateInstance(instance *DBInstance) chan error {
+func (f *CfRDSApi) CreateInstance(instance *DBInstance) (chan error, error) {
 	dbName := GenerateRandomString()
 	dbPassword := GenerateRandomAlphanumericString()
-	errChan := make(chan error, 1)
 
 	createDBInstanceResp, err := f.Svc.CreateDBInstance(&rds.CreateDBInstanceInput{
 		DBInstanceClass:         aws.String(instance.InstanceClass),
@@ -91,14 +90,13 @@ func (f *CfRDSApi) CreateInstance(instance *DBInstance) chan error {
 		PubliclyAccessible:      aws.Bool(true),
 	})
 	if err != nil {
-		errChan <- err
-		return errChan
+		return nil, err
 	}
 
 	secGroups := createDBInstanceResp.DBInstance.VpcSecurityGroups
 	if len(secGroups) == 0 {
-		errChan <- errors.New("Error: do not have any VPC security groups to associate with RDS instance")
-		return errChan
+		err = errors.New("Error: do not have any VPC security groups to associate with RDS instance")
+		return nil, err
 	}
 
 	instance.ARN = *createDBInstanceResp.DBInstance.DBInstanceArn
@@ -107,9 +105,10 @@ func (f *CfRDSApi) CreateInstance(instance *DBInstance) chan error {
 	instance.Password = dbPassword
 	instance.DBName = dbName
 
+	errChan := make(chan error, 1)
 	go f.waitForInstance(instance, errChan, false)
 
-	return errChan
+	return errChan, nil
 }
 
 func (f *CfRDSApi) RefreshInstance(instance *DBInstance) chan error {

@@ -21,16 +21,18 @@ type FakeApi struct {
 		result1 []*rds.DBSubnetGroup
 		result2 error
 	}
-	CreateInstanceStub        func(instance *api.DBInstance) chan error
+	CreateInstanceStub        func(instance *api.DBInstance) (chan error, error)
 	createInstanceMutex       sync.RWMutex
 	createInstanceArgsForCall []struct {
 		instance *api.DBInstance
 	}
 	createInstanceReturns struct {
 		result1 chan error
+		result2 error
 	}
 	createInstanceReturnsOnCall map[int]struct {
 		result1 chan error
+		result2 error
 	}
 	RefreshInstanceStub        func(instance *api.DBInstance) chan error
 	refreshInstanceMutex       sync.RWMutex
@@ -90,7 +92,7 @@ func (fake *FakeApi) GetSubnetGroupsReturnsOnCall(i int, result1 []*rds.DBSubnet
 	}{result1, result2}
 }
 
-func (fake *FakeApi) CreateInstance(instance *api.DBInstance) chan error {
+func (fake *FakeApi) CreateInstance(instance *api.DBInstance) (chan error, error) {
 	fake.createInstanceMutex.Lock()
 	ret, specificReturn := fake.createInstanceReturnsOnCall[len(fake.createInstanceArgsForCall)]
 	fake.createInstanceArgsForCall = append(fake.createInstanceArgsForCall, struct {
@@ -102,9 +104,9 @@ func (fake *FakeApi) CreateInstance(instance *api.DBInstance) chan error {
 		return fake.CreateInstanceStub(instance)
 	}
 	if specificReturn {
-		return ret.result1
+		return ret.result1, ret.result2
 	}
-	return fake.createInstanceReturns.result1
+	return fake.createInstanceReturns.result1, fake.createInstanceReturns.result2
 }
 
 func (fake *FakeApi) CreateInstanceCallCount() int {
@@ -119,23 +121,26 @@ func (fake *FakeApi) CreateInstanceArgsForCall(i int) *api.DBInstance {
 	return fake.createInstanceArgsForCall[i].instance
 }
 
-func (fake *FakeApi) CreateInstanceReturns(result1 chan error) {
+func (fake *FakeApi) CreateInstanceReturns(result1 chan error, result2 error) {
 	fake.CreateInstanceStub = nil
 	fake.createInstanceReturns = struct {
 		result1 chan error
-	}{result1}
+		result2 error
+	}{result1, result2}
 }
 
-func (fake *FakeApi) CreateInstanceReturnsOnCall(i int, result1 chan error) {
+func (fake *FakeApi) CreateInstanceReturnsOnCall(i int, result1 chan error, result2 error) {
 	fake.CreateInstanceStub = nil
 	if fake.createInstanceReturnsOnCall == nil {
 		fake.createInstanceReturnsOnCall = make(map[int]struct {
 			result1 chan error
+			result2 error
 		})
 	}
 	fake.createInstanceReturnsOnCall[i] = struct {
 		result1 chan error
-	}{result1}
+		result2 error
+	}{result1, result2}
 }
 
 func (fake *FakeApi) RefreshInstance(instance *api.DBInstance) chan error {

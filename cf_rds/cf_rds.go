@@ -24,7 +24,7 @@ type TinyUI interface {
 
 type Api interface {
 	GetSubnetGroups() ([]*rds.DBSubnetGroup, error)
-	CreateInstance(instance *api.DBInstance) chan error
+	CreateInstance(instance *api.DBInstance) (chan error, error)
 	RefreshInstance(instance *api.DBInstance) chan error
 }
 
@@ -113,12 +113,12 @@ func handleErrors(cmd string, err error, args []string, cliConnection plugin.Cli
 	if err != nil {
 		fmt.Println(fmt.Sprintf("Incorrect Usage: %v", err))
 		cliConnection.CliCommand("help", cmd)
-		os.Exit(1)
+		os.Exit(0)
 	}
 
 	if len(args) != 1 {
 		cliConnection.CliCommand("help", cmd)
-		os.Exit(1)
+		os.Exit(0)
 	}
 }
 
@@ -160,7 +160,11 @@ func (c *BasicPlugin) AwsRdsCreateRun(cliConnection plugin.CliConnection, args [
 		return
 	}
 
-	errChan := c.Api.CreateInstance(dbInstance)
+	errChan, err := c.Api.CreateInstance(dbInstance)
+	if err != nil {
+		c.UI.DisplayError(err)
+		return
+	}
 	c.waitForApiResponse(dbInstance, errChan, cliConnection)
 }
 
