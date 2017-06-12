@@ -104,26 +104,22 @@ func getOptions(opts AwsRdsOptions, cliConnection plugin.CliConnection, args []s
 	parser := flags.NewParser(opts, flags.None)
 	extraArgs, err := parser.ParseArgs(args[1:])
 
-	if handleErrors(args[0], err, extraArgs, cliConnection) {
-		os.Exit(-1)
-	}
+	handleErrors(args[0], err, extraArgs, cliConnection)
 
 	opts.SetServiceName(extraArgs[0])
 }
 
-func handleErrors(cmd string, err error, args []string, cliConnection plugin.CliConnection) bool {
+func handleErrors(cmd string, err error, args []string, cliConnection plugin.CliConnection) {
 	if err != nil {
 		fmt.Println(fmt.Sprintf("Incorrect Usage: %v", err))
 		cliConnection.CliCommand("help", cmd)
-		return true
+		os.Exit(1)
 	}
 
 	if len(args) != 1 {
 		cliConnection.CliCommand("help", cmd)
-		return true
+		os.Exit(1)
 	}
-
-	return false
 }
 
 type AwsRdsCreateOptions struct {
