@@ -63,6 +63,8 @@ func (c *BasicPlugin) updateUPS(instance *api.DBInstance, cli plugin.CliConnecti
 }
 
 func (c *BasicPlugin) waitForApiResponse(instance *api.DBInstance, errChan chan error, cli plugin.CliConnection) {
+	ticker := time.NewTicker(1 * c.WaitDuration).C
+
 	for {
 		select {
 		case err := <-errChan:
@@ -86,12 +88,11 @@ func (c *BasicPlugin) waitForApiResponse(instance *api.DBInstance, errChan chan 
 				{"SecGroup:", *instance.SecGroups[0].VpcSecurityGroupId}},
 				2)
 			return
-		default:
+		case <- ticker:
 			nextCheckTime := time.Now().Add(c.WaitDuration)
 			c.UI.DisplayText("RDS instance not available yet, next check at {{.Time}}", map[string]interface{}{
 				"Time": nextCheckTime.Format("15:04:05"),
 			})
-			time.Sleep(1 * c.WaitDuration)
 		}
 	}
 }
@@ -165,7 +166,7 @@ func (c *BasicPlugin) AwsRdsCreateRun(cliConnection plugin.CliConnection, args [
 		c.UI.DisplayError(err)
 		return
 	}
-	c.UI.DisplayText("Creating RDS Instance. This may take several minutes.")
+	c.UI.DisplayText("Creating RDS Instance. This may take several minutes...")
 	c.waitForApiResponse(dbInstance, errChan, cliConnection)
 }
 
