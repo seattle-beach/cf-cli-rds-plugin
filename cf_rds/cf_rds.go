@@ -165,6 +165,7 @@ func (c *BasicPlugin) AwsRdsCreateRun(cliConnection plugin.CliConnection, args [
 		c.UI.DisplayError(err)
 		return
 	}
+	c.UI.DisplayText("Creating RDS Instance. This may take several minutes.")
 	c.waitForApiResponse(dbInstance, errChan, cliConnection)
 }
 
