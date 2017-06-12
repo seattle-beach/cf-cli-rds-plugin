@@ -108,9 +108,10 @@ func (c *BasicPlugin) AwsRdsCreateRun(cliConnection plugin.CliConnection, args [
 		cliConnection.CliCommand("help", "aws-rds-create")
 		return
 	}
-
 	opts := AwsRdsPluginCommandOptions{}
-	extraArgs, err := flags.ParseArgs(&opts, args)
+
+	parser := flags.NewParser(&opts,  flags.None)
+	extraArgs, err := parser.ParseArgs(args)
 	serviceName := extraArgs[0]
 	subnetGroups, err := c.Api.GetSubnetGroups()
 	if err != nil {
@@ -140,8 +141,10 @@ func (c *BasicPlugin) AwsRdsCreateRun(cliConnection plugin.CliConnection, args [
 }
 
 func (c *BasicPlugin) AwsRdsRefreshRun(cliConnection plugin.CliConnection, args []string) {
+
 	opts := AwsRdsPluginCommandOptions{}
-	extraArgs, err := flags.ParseArgs(&opts, args)
+	parser := flags.NewParser(&opts,  flags.None)
+	extraArgs, err := parser.ParseArgs(args)
 
 	if err != nil || len(extraArgs) != 1 {
 		cliConnection.CliCommand("help", "aws-rds-refresh")
