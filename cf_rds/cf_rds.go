@@ -95,16 +95,6 @@ func (c *BasicPlugin) waitForApiResponse(instance *api.DBInstance, errChan chan 
 	}
 }
 
-type AwsRdsPluginCommandOptions struct {
-	CreateCmd struct {
-		Engine  string `long:"engine" description:"The name of the RDS database engine to be used for this instance." required:"false" default:"postgres"`
-		Storage int64  `long:"size" description:"The amount of storage in Gb for the RDS instance." required:"false" default:"20"`
-		Class   string `long:"class" description:"The RDS instance type class." required:"false" default:"db.t2.micro"`
-	} `command:"aws-rds-create" description:"See global usage."`
-	RefreshCmd struct {
-	} `command:"aws-rds-refresh" description:"See global usage."`
-}
-
 func handleErrors(cmd string, err error, args []string, cliConnection plugin.CliConnection) bool {
 	if err != nil {
 		fmt.Println(fmt.Sprintf("Incorrect Usage: %v", err))
@@ -119,10 +109,15 @@ func handleErrors(cmd string, err error, args []string, cliConnection plugin.Cli
 
 	return false
 }
+type AwsRdsCreateOptions struct {
+	Engine  string `long:"engine" description:"The name of the RDS database engine to be used for this instance." required:"false" default:"postgres"`
+	Storage int64  `long:"size" description:"The amount of storage in Gb for the RDS instance." required:"false" default:"20"`
+	Class   string `long:"class" description:"The RDS instance type class." required:"false" default:"db.t2.micro"`
+}
 
 func (c *BasicPlugin) AwsRdsCreateRun(cliConnection plugin.CliConnection, args []string) {
 
-	opts := AwsRdsPluginCommandOptions{}
+	opts := AwsRdsCreateOptions{}
 
 	parser := flags.NewParser(&opts, flags.None)
 	extraArgs, err := parser.ParseArgs(args)
@@ -141,9 +136,9 @@ func (c *BasicPlugin) AwsRdsCreateRun(cliConnection plugin.CliConnection, args [
 	dbInstance := &api.DBInstance{
 		InstanceName:  serviceName,
 		SubnetGroup:   subnetGroups[0],
-		InstanceClass: opts.CreateCmd.Class,
-		Engine:        opts.CreateCmd.Engine,
-		Storage:       opts.CreateCmd.Storage,
+		InstanceClass: opts.Class,
+		Engine:        opts.Engine,
+		Storage:       opts.Storage,
 		AZ:            "us-east-1a",
 		Port:          int64(5432),
 		Username:      "root",
@@ -158,10 +153,11 @@ func (c *BasicPlugin) AwsRdsCreateRun(cliConnection plugin.CliConnection, args [
 	errChan := c.Api.CreateInstance(dbInstance)
 	c.waitForApiResponse(dbInstance, errChan, cliConnection)
 }
+type AwsRdsRefreshOptions struct {}
 
 func (c *BasicPlugin) AwsRdsRefreshRun(cliConnection plugin.CliConnection, args []string) {
 
-	opts := AwsRdsPluginCommandOptions{}
+	opts := AwsRdsRefreshOptions{}
 	parser := flags.NewParser(&opts, flags.None)
 	extraArgs, err := parser.ParseArgs(args)
 
@@ -220,10 +216,10 @@ func (c *BasicPlugin) Run(cliConnection plugin.CliConnection, args []string) {
 
 	switch args[0] {
 	case "aws-rds-create":
-		c.AwsRdsCreateRun(cliConnection, args)
+		c.AwsRdsCreateRun(cliConnection, args[1:])
 		return
 	case "aws-rds-refresh":
-		c.AwsRdsRefreshRun(cliConnection, args)
+		c.AwsRdsRefreshRun(cliConnection, args[1:])
 		return
 	case "aws-rds-register":
 		c.AwsRdsRegisterRun(cliConnection, args[1:])
