@@ -1,12 +1,13 @@
 package cf_rds
 
 import (
-	"code.cloudfoundry.org/cli/plugin"
 	"encoding/json"
+	"time"
+
+	"code.cloudfoundry.org/cli/plugin"
 	"github.com/aws/aws-sdk-go/service/rds"
 	"github.com/jessevdk/go-flags"
 	"github.com/seattle-beach/cf-cli-rds-plugin/api"
-	"time"
 )
 
 type UpsOption struct {
@@ -110,7 +111,7 @@ func (c *BasicPlugin) AwsRdsCreateRun(cliConnection plugin.CliConnection, args [
 	}
 	opts := AwsRdsPluginCommandOptions{}
 
-	parser := flags.NewParser(&opts,  flags.None)
+	parser := flags.NewParser(&opts, flags.None)
 	extraArgs, err := parser.ParseArgs(args)
 	serviceName := extraArgs[0]
 	subnetGroups, err := c.Api.GetSubnetGroups()
@@ -143,7 +144,7 @@ func (c *BasicPlugin) AwsRdsCreateRun(cliConnection plugin.CliConnection, args [
 func (c *BasicPlugin) AwsRdsRefreshRun(cliConnection plugin.CliConnection, args []string) {
 
 	opts := AwsRdsPluginCommandOptions{}
-	parser := flags.NewParser(&opts,  flags.None)
+	parser := flags.NewParser(&opts, flags.None)
 	extraArgs, err := parser.ParseArgs(args)
 
 	if err != nil || len(extraArgs) != 1 {
@@ -159,16 +160,26 @@ func (c *BasicPlugin) AwsRdsRefreshRun(cliConnection plugin.CliConnection, args 
 	errChan := c.Api.RefreshInstance(dbInstance)
 	c.waitForApiResponse(dbInstance, errChan, cliConnection)
 }
+
+type AwsRdsRegisterOptions struct {
+	Uri string `long:"uri" description:"" required:"true"`
+}
+
 func (c *BasicPlugin) AwsRdsRegisterRun(cliConnection plugin.CliConnection, args []string) {
-	if len(args) < 4 || args[2] != "--uri" {
+
+	opts := AwsRdsRegisterOptions{}
+	parser := flags.NewParser(&opts, flags.None)
+	extraArgs, err := parser.ParseArgs(args)
+
+	if err != nil || len(extraArgs) != 1 {
 		cliConnection.CliCommand("help", "aws-rds-register")
 		return
 	}
-	serviceName := args[1]
+	serviceName := extraArgs[0]
 	uri, _ := json.Marshal(&UpsOption{
-		Uri: args[3],
+		Uri: opts.Uri,
 	})
-	_, err := cliConnection.CliCommand("cups", serviceName, "-p", string(uri))
+	_, err = cliConnection.CliCommand("cups", serviceName, "-p", string(uri))
 	if err != nil {
 		c.UI.DisplayError(err)
 		return
@@ -190,7 +201,6 @@ func (c *BasicPlugin) AwsRdsRegisterRun(cliConnection plugin.CliConnection, args
 
 func (c *BasicPlugin) Run(cliConnection plugin.CliConnection, args []string) {
 
-
 	switch args[0] {
 	case "aws-rds-create":
 		c.AwsRdsCreateRun(cliConnection, args)
@@ -199,7 +209,7 @@ func (c *BasicPlugin) Run(cliConnection plugin.CliConnection, args []string) {
 		c.AwsRdsRefreshRun(cliConnection, args)
 		return
 	case "aws-rds-register":
-		c.AwsRdsRegisterRun(cliConnection, args)
+		c.AwsRdsRegisterRun(cliConnection, args[1:])
 		return
 	default:
 		// TODO Show Usage
