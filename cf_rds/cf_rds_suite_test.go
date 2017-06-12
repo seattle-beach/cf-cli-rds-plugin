@@ -11,4 +11,3 @@ func TestCfCliRdsPlugin(t *testing.T) {
 	RegisterFailHandler(Fail)
 	RunSpecs(t, "CfCliRdsPlugin Suite")
 }
-

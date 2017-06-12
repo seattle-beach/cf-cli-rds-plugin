@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"code.cloudfoundry.org/cli/plugin"
+	"fmt"
 	"github.com/aws/aws-sdk-go/service/rds"
 	"github.com/jessevdk/go-flags"
 	"github.com/seattle-beach/cf-cli-rds-plugin/api"
@@ -105,14 +106,23 @@ type AwsRdsPluginCommandOptions struct {
 }
 
 func (c *BasicPlugin) AwsRdsCreateRun(cliConnection plugin.CliConnection, args []string) {
-	if len(args) < 2 {
-		cliConnection.CliCommand("help", "aws-rds-create")
-		return
-	}
+
 	opts := AwsRdsPluginCommandOptions{}
 
 	parser := flags.NewParser(&opts, flags.None)
 	extraArgs, err := parser.ParseArgs(args)
+
+	if err != nil {
+		fmt.Println(fmt.Sprintf("Incorrect Usage: %v", err))
+		cliConnection.CliCommand("help", "aws-rds-create")
+		return
+	}
+
+	if len(extraArgs) != 1 {
+		cliConnection.CliCommand("help", "aws-rds-create")
+		return
+	}
+
 	serviceName := extraArgs[0]
 	subnetGroups, err := c.Api.GetSubnetGroups()
 	if err != nil {
@@ -147,7 +157,12 @@ func (c *BasicPlugin) AwsRdsRefreshRun(cliConnection plugin.CliConnection, args 
 	parser := flags.NewParser(&opts, flags.None)
 	extraArgs, err := parser.ParseArgs(args)
 
-	if err != nil || len(extraArgs) != 1 {
+	if err != nil {
+		fmt.Println(fmt.Sprintf("Incorrect Usage: %v", err))
+		cliConnection.CliCommand("help", "aws-rds-refresh")
+	}
+
+	if len(extraArgs) != 1 {
 		cliConnection.CliCommand("help", "aws-rds-refresh")
 		return
 	}
@@ -171,7 +186,13 @@ func (c *BasicPlugin) AwsRdsRegisterRun(cliConnection plugin.CliConnection, args
 	parser := flags.NewParser(&opts, flags.None)
 	extraArgs, err := parser.ParseArgs(args)
 
-	if err != nil || len(extraArgs) != 1 {
+	if err != nil {
+		fmt.Println(fmt.Sprintf("Incorrect Usage: %v", err))
+		cliConnection.CliCommand("help", "aws-rds-register")
+		return
+	}
+
+	if len(extraArgs) != 1 {
 		cliConnection.CliCommand("help", "aws-rds-register")
 		return
 	}
