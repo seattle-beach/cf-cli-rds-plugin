@@ -73,11 +73,12 @@ func (c *BasicPlugin) waitForApiResponse(instance *api.DBInstance, errChan chan 
 				return
 			}
 
-			err = c.updateUPS(instance, cli)
+			err = c.createUPS(instance, cli)
 			if err != nil {
 				c.UI.DisplayError(err)
 				return
 			}
+
 			c.UI.DisplayText("AWS RDS Instance:\n{{.instance}}", map[string]interface{}{
 				"instance": instance.InstanceName,
 			})
@@ -153,12 +154,6 @@ func (c *BasicPlugin) AwsRdsCreateRun(cliConnection plugin.CliConnection, args [
 		AZ:            "us-east-1a",
 		Port:          int64(5432),
 		Username:      "root",
-	}
-
-	err = c.createUPS(dbInstance, cliConnection)
-	if err != nil {
-		c.UI.DisplayError(err)
-		return
 	}
 
 	errChan, err := c.Api.CreateInstance(dbInstance)
