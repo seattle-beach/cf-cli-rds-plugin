@@ -264,7 +264,7 @@ func (c *BasicPlugin) GetMetadata() plugin.PluginMetadata {
 				HelpText: "command to create an RDS instance and register it as a service with CF",
 
 				UsageDetails: plugin.Usage{
-					Usage: "cf aws-rds-create SERVICE_NAME",
+					Usage: "cf aws-rds-create [--engine ENGINE] [--size SIZE] [--class CLASS] SERVICE_NAME",
 				},
 			},
 			{
