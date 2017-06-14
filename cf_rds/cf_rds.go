@@ -3,9 +3,9 @@ package cf_rds
 import (
 	"encoding/json"
 	"fmt"
-	"os"
 	"time"
 
+	"code.cloudfoundry.org/cli/cf/errors"
 	"code.cloudfoundry.org/cli/plugin"
 	"github.com/aws/aws-sdk-go/service/rds"
 	"github.com/jessevdk/go-flags"
@@ -89,7 +89,7 @@ func (c *BasicPlugin) waitForApiResponse(instance *api.DBInstance, errChan chan 
 				{"SecGroup:", *instance.SecGroups[0].VpcSecurityGroupId}},
 				2)
 			return
-		case <- ticker:
+		case <-ticker:
 			nextCheckTime := time.Now().Add(c.WaitDuration)
 			c.UI.DisplayText("RDS instance not available yet, next check at {{.Time}}", map[string]interface{}{
 				"Time": nextCheckTime.Format("15:04:05"),
@@ -102,26 +102,32 @@ type AwsRdsOptions interface {
 	SetServiceName(string)
 }
 
-func getOptions(opts AwsRdsOptions, cliConnection plugin.CliConnection, args []string) {
+func getOptions(opts AwsRdsOptions, cliConnection plugin.CliConnection, args []string) error {
 	parser := flags.NewParser(opts, flags.None)
 	extraArgs, err := parser.ParseArgs(args[1:])
 
-	handleErrors(args[0], err, extraArgs, cliConnection)
+	err = handleErrors(args[0], err, extraArgs, cliConnection)
+	if err != nil {
+		return err
+	}
 
 	opts.SetServiceName(extraArgs[0])
+	return nil
 }
 
-func handleErrors(cmd string, err error, args []string, cliConnection plugin.CliConnection) {
+func handleErrors(cmd string, err error, args []string, cliConnection plugin.CliConnection) error {
 	if err != nil {
 		fmt.Println(fmt.Sprintf("Incorrect Usage: %v", err))
 		cliConnection.CliCommand("help", cmd)
-		os.Exit(1)
+		return fmt.Errorf("Incorrect Usage: %v", err)
 	}
 
 	if len(args) != 1 {
 		cliConnection.CliCommand("help", cmd)
-		os.Exit(0)
+		return errors.New("Extra arguments passed")
 	}
+
+	return nil
 }
 
 type AwsRdsCreateOptions struct {
@@ -135,14 +141,17 @@ func (a *AwsRdsCreateOptions) SetServiceName(name string) {
 	a.ServiceName = name
 }
 
-func (c *BasicPlugin) AwsRdsCreateRun(cliConnection plugin.CliConnection, args []string) {
+func (c *BasicPlugin) AwsRdsCreateRun(cliConnection plugin.CliConnection, args []string) error {
 	opts := AwsRdsCreateOptions{}
-	getOptions(&opts, cliConnection, args)
+	err := getOptions(&opts, cliConnection, args)
+	if err != nil {
+		return err
+	}
 
 	subnetGroups, err := c.Api.GetSubnetGroups()
 	if err != nil {
 		c.UI.DisplayError(err)
-		return
+		return err
 	}
 
 	dbInstance := &api.DBInstance{
@@ -159,10 +168,12 @@ func (c *BasicPlugin) AwsRdsCreateRun(cliConnection plugin.CliConnection, args [
 	errChan, err := c.Api.CreateInstance(dbInstance)
 	if err != nil {
 		c.UI.DisplayError(err)
-		return
+		return err
 	}
 	c.UI.DisplayText("Creating RDS Instance. This may take several minutes...")
 	c.waitForApiResponse(dbInstance, errChan, cliConnection)
+
+	return nil
 }
 
 type AwsRdsRefreshOptions struct {
@@ -173,9 +184,12 @@ func (a *AwsRdsRefreshOptions) SetServiceName(name string) {
 	a.ServiceName = name
 }
 
-func (c *BasicPlugin) AwsRdsRefreshRun(cliConnection plugin.CliConnection, args []string) {
+func (c *BasicPlugin) AwsRdsRefreshRun(cliConnection plugin.CliConnection, args []string) error {
 	opts := AwsRdsRefreshOptions{}
-	getOptions(&opts, cliConnection, args)
+	err := getOptions(&opts, cliConnection, args)
+	if err != nil {
+		return err
+	}
 
 	dbInstance := &api.DBInstance{
 		InstanceName: opts.ServiceName,
@@ -183,6 +197,7 @@ func (c *BasicPlugin) AwsRdsRefreshRun(cliConnection plugin.CliConnection, args 
 
 	errChan := c.Api.RefreshInstance(dbInstance)
 	c.waitForApiResponse(dbInstance, errChan, cliConnection)
+	return nil
 }
 
 type AwsRdsRegisterOptions struct {
@@ -194,23 +209,26 @@ func (a *AwsRdsRegisterOptions) SetServiceName(name string) {
 	a.ServiceName = name
 }
 
-func (c *BasicPlugin) AwsRdsRegisterRun(cliConnection plugin.CliConnection, args []string) {
+func (c *BasicPlugin) AwsRdsRegisterRun(cliConnection plugin.CliConnection, args []string) error {
 	opts := AwsRdsRegisterOptions{}
-	getOptions(&opts, cliConnection, args)
+	err := getOptions(&opts, cliConnection, args)
+	if err != nil {
+		return err
+	}
 
 	uri, _ := json.Marshal(&UpsOption{
 		Uri: opts.Uri,
 	})
-	_, err := cliConnection.CliCommand("cups", opts.ServiceName, "-p", string(uri))
+	_, err = cliConnection.CliCommand("cups", opts.ServiceName, "-p", string(uri))
 	if err != nil {
 		c.UI.DisplayError(err)
-		return
+		return err
 	}
 
 	space, err := cliConnection.GetCurrentSpace()
 	if err != nil {
 		c.UI.DisplayError(err)
-		return
+		return err
 	}
 
 	c.UI.DisplayText("Successfully created user-provided service {{.ServiceName}} in space {{.Space}}! You can bind this service to an app using `cf bind-service` or add it to the `services` section in your manifest.yml",
@@ -219,6 +237,7 @@ func (c *BasicPlugin) AwsRdsRegisterRun(cliConnection plugin.CliConnection, args
 			"Space":       space.Name,
 		},
 	)
+	return nil
 }
 
 func (c *BasicPlugin) Run(cliConnection plugin.CliConnection, args []string) {

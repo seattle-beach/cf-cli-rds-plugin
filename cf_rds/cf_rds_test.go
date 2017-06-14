@@ -61,7 +61,7 @@ var _ = Describe("CfRds", func() {
 					})
 				})
 
-				XContext("error cases", func() {
+				Context("error cases", func() {
 					It("displays usage if there are no arguments", func() {
 						args = []string{"aws-rds-register"}
 						p.Run(conn, args)
@@ -274,12 +274,12 @@ var _ = Describe("CfRds", func() {
 					Expect(instance.InstanceName).To(Equal("name"))
 				})
 
-				It("captures the uri and calls uups", func() {
+				It("captures the uri and calls cups", func() {
 					p.Run(conn, args)
 					Expect(conn.CliCommandCallCount()).To(Equal(1))
 
 					uupsArgs := conn.CliCommandArgsForCall(0)
-					Expect(uupsArgs[0:3]).To(Equal([]string{"uups", "name", "-p"}))
+					Expect(uupsArgs[0:3]).To(Equal([]string{"cups", "name", "-p"}))
 					Expect(uupsArgs[3]).To(MatchJSON(`{
 					"instance_id": "name",
 					"arn": "arn:aws:rds:us-east-1:10101010:db:name",
@@ -346,7 +346,7 @@ var _ = Describe("CfRds", func() {
 							HelpText: "command to create an RDS instance and register it as a service with CF",
 
 							UsageDetails: plugin.Usage{
-								Usage: "cf aws-rds-create SERVICE_NAME",
+								Usage: "cf aws-rds-create [--engine ENGINE] [--size SIZE] [--class CLASS] SERVICE_NAME",
 							},
 						},
 						{
