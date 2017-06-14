@@ -115,7 +115,7 @@ func handleErrors(cmd string, err error, args []string, cliConnection plugin.Cli
 	if err != nil {
 		fmt.Println(fmt.Sprintf("Incorrect Usage: %v", err))
 		cliConnection.CliCommand("help", cmd)
-		os.Exit(0)
+		os.Exit(1)
 	}
 
 	if len(args) != 1 {
